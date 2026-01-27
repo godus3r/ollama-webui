@@ -6,11 +6,30 @@
     <title>Ollama Chat - Local AI Assistant</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Mono:wght@400;500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Open+Sans:wght@400;500;700&family=Source+Code+Pro:wght@400;500&family=Fira+Code:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
         
+        /* Interface font - for app UI elements (excludes answer and code) */
         * {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--interface-font, 'Inter'), sans-serif;
+            font-size: var(--interface-font-size, 14px);
+        }
+        
+        /* Answer font - only for AI message content (overrides interface font) */
+        .ai-message-content,
+        .ai-message-content * {
+            font-family: var(--answer-font, 'Inter'), sans-serif !important;
+            font-size: var(--answer-font-size, 14px) !important;
+        }
+        
+        /* Code font - for code blocks (overrides both interface and answer fonts) */
+        pre code, code, .ai-message-content code, .ai-message-content pre code {
+            font-family: var(--code-font, 'JetBrains Mono'), 'Consolas', monospace !important;
+            font-size: var(--code-font-size, 13px) !important;
         }
         
         .scrollbar-thin::-webkit-scrollbar {
@@ -64,51 +83,65 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         
+        /* Code block styling */
         pre {
             position: relative;
+            margin: 0.35rem 0 !important;
+            padding: 0 !important;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #282c34;
         }
         
         pre code {
             display: block;
+            padding: 0.5rem 0.75rem !important;
+            padding-top: 2rem !important;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
             overflow-x: auto;
-            padding: 1rem;
-            padding-top: 2.5rem;
-            border-radius: 0.5rem;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 0.875rem;
+            white-space: pre;
+            background: #282c34;
+            color: #abb2bf;
+        }
+        
+        pre code.hljs {
+            padding: 0.5rem 0.75rem !important;
+            padding-top: 2rem !important;
         }
         
         .copy-code-chip {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            padding: 0.15rem 0.5rem;
+            position: sticky;
+            top: 0.4rem;
+            float: right;
+            margin: 0 0.5rem 0 0;
+            padding: 0.2rem 0.5rem;
             border-radius: 9999px;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             cursor: pointer;
             transition: all 0.2s;
             z-index: 10;
-            border: 1px solid;
+            border: none;
             background: transparent;
+            color: #d1d5db;
         }
         
-        .model-name-tooltip {
-            position: relative;
+        .copy-code-chip:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
         }
         
-        .model-name-tooltip:hover::after {
-            content: attr(data-fullname);
-            position: absolute;
-            left: 0;
-            top: 100%;
-            background: #1f2937;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.65rem;
-            white-space: nowrap;
-            z-index: 100;
-            margin-top: 0.25rem;
+        /* Fix model selector dropdown arrow */
+        #modelSelector {
+            padding-right: 2.5rem !important;
+            background-image: none !important;
+        }
+        
+        /* Fix model selector dropdown arrow */
+        #modelSelector {
+            padding-right: 2.5rem !important;
+            background-image: none !important;
         }
         
         @keyframes fadeIn {
@@ -130,14 +163,14 @@
         }
         
         .stat-label {
-            font-size: 0.6rem;
+            font-size: 0.55rem;
             text-transform: uppercase;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.02em;
             opacity: 0.8;
         }
         
         .stat-value {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 600;
         }
         
@@ -146,17 +179,212 @@
             padding: 0.5rem;
             margin-bottom: 0.5rem;
         }
+        
+        /* Confirmation Modal */
+        .confirm-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        
+        .confirm-modal-content {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        
+        .confirm-modal-content.dark {
+            background: #1f2937;
+            color: white;
+        }
+        
+        /* Toggle switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .toggle-switch .toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            transition: transform 0.3s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        .toggle-switch.active .toggle-knob {
+            transform: translateX(20px);
+        }
+        
+        /* Scroll navigation buttons - positioned next to scrollbar */
+        .scroll-nav-container {
+            position: absolute;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 30;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        
+        .scroll-nav-btn {
+            padding: 0.4rem 0.75rem;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            font-size: 0.7rem;
+            font-weight: 500;
+            white-space: nowrap;
+            pointer-events: auto;
+        }
+        
+        .scroll-nav-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .scroll-nav-btn i {
+            font-size: 0.6rem;
+        }
+        
+        /* System prompt popup */
+        .system-prompt-popup {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 6rem;
+            margin-bottom: 0.5rem;
+            border-radius: 1rem;
+            padding: 1rem;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            z-index: 20;
+        }
+        
+        /* Ollama logo styles */
+        .ollama-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #fff;
+            overflow: hidden;
+        }
+        
+        .ollama-logo img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+        
+        /* Token speed indicator */
+        .token-speed {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        /* Ollama logo in sidebar */
+        .ollama-logo-sidebar {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #fff;
+            overflow: hidden;
+        }
+        
+        .ollama-logo-sidebar img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+        
+        /* Settings in sidebar */
+        .settings-section {
+            padding: 1rem;
+            border-bottom: 1px solid;
+        }
+        
+        .settings-section h4 {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Collapsible settings sections */
+        .settings-section-container > div {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        
+        .settings-section-container > div.collapsed {
+            max-height: 0 !important;
+            opacity: 0;
+            margin-top: 0 !important;
+        }
+        
+        .settings-section-container .fa-chevron-down.rotated {
+            transform: rotate(180deg);
+        }
+        
+        /* Hide number input spinners */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
     </style>
 </head>
 <body class="h-screen overflow-hidden bg-white text-gray-900">
     <div id="app" class="flex h-full">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-80 flex flex-col border-r border-gray-200 bg-gray-50">
+        <aside id="sidebar" class="w-[340px] flex flex-col border-r border-gray-200 bg-gray-50">
             <!-- Logo -->
             <div id="logoSection" class="p-4 border-b border-gray-200">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center shadow-lg">
-                        <i class="fas fa-robot text-white text-lg"></i>
+                    <div class="ollama-logo-sidebar">
+                        <img src="https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7" alt="Ollama" onerror="this.parentElement.innerHTML='<i class=\'fas fa-robot text-white text-lg\'></i>'" />
                     </div>
                     <div>
                         <h1 id="appTitle" class="font-bold text-lg text-gray-900">Ollama Chat</h1>
@@ -172,14 +400,14 @@
                     <span id="availableModelsCount" class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">0</span>
                 </div>
                 <div class="relative">
-                    <select id="modelSelector" onchange="changeModel(this.value)" class="w-full py-2.5 px-4 rounded-xl appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm">
+                    <select id="modelSelector" onchange="changeModel(this.value)" class="w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm">
                         <option value="">Loading models...</option>
                     </select>
-                    <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none"></i>
+                    <i id="modelDropdownIcon" class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none z-10"></i>
                 </div>
                 
                 <!-- Load Model Button -->
-                <button id="loadModelBtn" onclick="loadModel()" class="hidden w-full mt-3 py-2 px-4 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                <button id="loadModelBtn" onclick="loadModel()" class="w-full mt-3 py-2 px-4 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
                     <i class="fas fa-play"></i>
                     <span>Start Model</span>
                 </button>
@@ -188,19 +416,19 @@
                 <div id="runningModelsSection" class="mt-3">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Running Models</p>
-                        <span id="runningModelsCount" class="text-xs text-gray-400">0</span>
+                        <span id="runningModelsCount" class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full font-medium">0</span>
                     </div>
-                    <div id="runningModelsList" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+                    <div id="runningModelsList" class="space-y-2 overflow-y-auto scrollbar-thin" style="max-height: none;">
                         <p class="text-xs text-gray-400 text-center py-2">No models running</p>
                     </div>
                 </div>
             </div>
             
             <!-- Chat Sessions -->
-            <div class="flex-1 overflow-y-auto scrollbar-thin p-3">
+            <div id="chatSessionsSection" class="flex-1 overflow-y-auto scrollbar-thin p-3 border-b border-gray-200">
                 <div class="flex items-center justify-between mb-2 px-2">
                     <p id="recentChatsLabel" class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent Chats</p>
-                    <span id="totalMessagesCount" class="text-xs text-gray-400">0 messages</span>
+                    <span id="totalMessagesCount" class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">0 messages</span>
                 </div>
                 
                 <!-- New Chat Button -->
@@ -220,26 +448,30 @@
                     <i class="fas fa-cog"></i>
                     <span class="font-medium">Settings</span>
                 </button>
+                
+
             </div>
         </aside>
         
         <!-- Main Chat Area -->
-        <main id="mainArea" class="flex-1 flex flex-col bg-white">
+        <main id="mainArea" class="flex-1 flex flex-col bg-white relative">
             <!-- Header -->
-            <header id="header" class="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white">
+            <header id="header" class="border-b border-gray-200 flex items-center justify-between px-6 py-3 bg-white">
                 <div class="flex items-center gap-4">
                     <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors lg:hidden">
                         <i class="fas fa-bars text-gray-600"></i>
                     </button>
-                    <div class="flex items-center gap-2">
-                        <h2 id="chatTitle" class="font-semibold text-gray-900">New Chat</h2>
-                        <button onclick="renameCurrentChat()" id="renameChatBtn" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Rename chat">
-                            <i class="fas fa-pen text-gray-400 hover:text-gray-600 text-xs"></i>
-                        </button>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 id="chatTitle" class="font-semibold text-gray-900">New Chat</h2>
+                            <button onclick="renameCurrentChat()" id="renameChatBtn" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Rename chat">
+                                <i class="fas fa-pen text-gray-400 hover:text-gray-600 text-xs"></i>
+                            </button>
+                        </div>
+                        <p id="chatSubtitle" class="text-xs text-gray-500"><span id="chatMessageCount">0 messages</span> • <span id="chatTokenCount">0 tokens</span></p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <p id="chatSubtitle" class="text-xs text-gray-500 mr-2">Start a conversation</p>
                     <button onclick="toggleTheme()" class="p-2.5 rounded-xl hover:bg-gray-100 transition-colors" title="Toggle theme">
                         <i id="themeIcon" class="fas fa-moon text-gray-600"></i>
                     </button>
@@ -247,7 +479,7 @@
             </header>
             
             <!-- Messages Container -->
-            <div id="messagesContainer" class="flex-1 overflow-y-auto scrollbar-thin p-6 bg-gray-50">
+            <div id="messagesContainer" class="flex-1 overflow-y-auto scrollbar-thin p-6 bg-gray-50 relative">
                 <div id="messages" class="max-w-4xl mx-auto space-y-6">
                     <!-- Welcome Message -->
                     <div id="welcomeScreen" class="flex flex-col items-center justify-center text-center py-20">
@@ -282,27 +514,56 @@
                 </div>
             </div>
             
+            <!-- Scroll Navigation Buttons Container - Outside messages container, positioned fixed -->
+            <div id="scrollNavContainer" class="scroll-nav-container" style="position: fixed; right: 380px;">
+                <button id="scrollTopBtn" onclick="scrollToTop()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;">
+                    <i class="fas fa-chevron-up"></i>
+                    <span>Go to top</span>
+                </button>
+                <button id="scrollBottomBtn" onclick="scrollToBottom()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;">
+                    <i class="fas fa-chevron-down"></i>
+                    <span>Go to bottom</span>
+                </button>
+            </div>
+            
             <!-- Input Area -->
-            <div id="inputArea" class="p-4 border-t border-gray-200 bg-white">
+            <div id="inputArea" class="p-4 border-t border-gray-200 bg-white relative">
                 <div class="max-w-4xl mx-auto">
                     <div class="relative flex items-end gap-3">
                         <div class="flex-1 relative">
+                            <!-- System Prompt Popup - positioned above the input -->
+                            <div id="systemPromptPopup" class="system-prompt-popup bg-white border border-gray-200 hidden">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-semibold text-sm text-gray-900">Chat System Prompt</h4>
+                                    <button onclick="closeSystemPromptPopup()" class="p-1 rounded hover:bg-gray-100">
+                                        <i class="fas fa-times text-gray-400 text-xs"></i>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-gray-500 mb-2">Custom instructions for this chat only (auto-saves on close)</p>
+                                <textarea 
+                                    id="chatSystemPrompt" 
+                                    rows="4" 
+                                    class="w-full py-3 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    placeholder="You are a helpful assistant specialized in..."
+                                ></textarea>
+                            </div>
                             <textarea 
                                 id="messageInput" 
                                 placeholder="Type your message..." 
                                 rows="1"
-                                class="w-full py-4 px-5 pr-28 rounded-2xl border border-gray-300 bg-white text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40"
+                                class="w-full py-4 px-5 pr-36 rounded-2xl border border-gray-300 bg-white text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40"
                                 onkeydown="handleKeyDown(event)"
                                 oninput="autoResize(this)"
                             ></textarea>
                             <div class="absolute right-3 bottom-3 flex items-center gap-2">
-                                <!-- Clear Chat Button -->
+                                <!-- System Prompt Button -->
                                 <button 
-                                    onclick="clearCurrentChat()" 
-                                    class="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors"
-                                    title="Clear chat"
+                                    id="systemPromptBtn"
+                                    onclick="toggleSystemPromptPopup()" 
+                                    class="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors"
+                                    title="Chat system prompt"
                                 >
-                                    <i class="fas fa-trash-alt text-sm"></i>
+                                    <i class="fas fa-sliders-h"></i>
                                 </button>
                                 <!-- Stop Button (hidden by default) -->
                                 <button 
@@ -332,24 +593,28 @@
         </main>
     </div>
     
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeSettings()"></div>
-        <div id="settingsContent" class="relative w-full max-w-lg rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto bg-white">
+    <!-- Settings Modal - Shows as sidebar panel, doesn't block chat -->
+    <div id="settingsModal" class="fixed inset-0 z-50 hidden pointer-events-none">
+        <div class="absolute inset-0 pointer-events-none"></div>
+        <div id="settingsContent" class="absolute left-0 top-0 bottom-0 w-[340px] shadow-2xl p-5 overflow-y-auto bg-white scrollbar-thin pointer-events-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 id="settingsTitle" class="text-xl font-bold text-gray-900">Settings</h3>
-                <button onclick="closeSettings()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                    <i class="fas fa-times text-gray-600"></i>
+                <button onclick="closeSettings()" class="px-3 py-1.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors flex items-center gap-2">
+                    <i class="fas fa-times text-xs"></i>
+                    <span class="text-sm font-medium">Close</span>
                 </button>
             </div>
             
             <!-- Connection Settings -->
-            <div class="mb-6">
-                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                    <i class="fas fa-plug text-purple-500"></i>
-                    Connection
-                </h4>
-                <div class="space-y-3">
+            <div class="mb-4 settings-section-container">
+                <button onclick="toggleSettingsSection('connectionSection')" class="w-full font-semibold flex items-center justify-between text-gray-900 py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <i class="fas fa-plug text-purple-500"></i>
+                        Connection
+                    </span>
+                    <i id="connectionSectionIcon" class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>
+                </button>
+                <div id="connectionSection" class="space-y-3 mt-3 pl-4 collapsed" style="max-height: 0;">
                     <div>
                         <label class="text-sm text-gray-500 mb-1 block">Ollama API URL</label>
                         <input type="text" id="apiUrl" value="http://127.0.0.1:11434" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500">
@@ -365,56 +630,152 @@
             </div>
             
             <!-- Model Settings -->
-            <div class="mb-6">
-                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                    <i class="fas fa-brain text-purple-500"></i>
-                    Model Configuration
-                </h4>
-                <div class="space-y-3">
+            <div class="mb-4 settings-section-container">
+                <button onclick="toggleSettingsSection('modelSection2')" class="w-full font-semibold flex items-center justify-between text-gray-900 py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <i class="fas fa-brain text-purple-500"></i>
+                        Model Configuration
+                    </span>
+                    <i id="modelSection2Icon" class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>
+                </button>
+                <div id="modelSection2" class="space-y-4 mt-3 pl-4 collapsed" style="max-height: 0;">
                     <div>
-                        <label class="text-sm text-gray-500 mb-1 block">Current Model</label>
-                        <p id="settingsCurrentModel" class="py-2.5 px-4 rounded-xl border border-gray-300 bg-gray-50 text-gray-900">None selected</p>
+                        <label id="defaultModelLabel" class="text-sm text-gray-600 mb-1 block">Default Model</label>
+                        <p id="defaultModelHint" class="text-xs text-gray-400 mb-2">Load model for using with new chats</p>
+                        <div class="relative">
+                            <select id="settingsModelSelector" onchange="setDefaultModel(this.value)" class="w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm">
+                                <option value="">Loading models...</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none"></i>
+                        </div>
                     </div>
-                    <div>
-                        <label class="text-sm text-gray-500 mb-1 block">Temperature (0-1)</label>
-                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7" class="w-full accent-purple-500" oninput="updateTempDisplay(this.value)">
-                        <p class="text-sm text-gray-500">Current: <span id="tempDisplay" class="font-medium text-purple-600">0.7</span></p>
+                    
+                    <!-- Allow Multiple Models Toggle -->
+                    <div id="multiModelContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <div class="flex items-center justify-between">
+                            <span id="multiModelLabel" class="text-gray-700 text-sm font-medium">Allow running multiple models</span>
+                            <div id="multiModelToggle" onclick="toggleMultiModel()" class="toggle-switch bg-gray-300">
+                                <span class="toggle-knob"></span>
+                            </div>
+                        </div>
+                        <p id="multiModelDesc" class="text-xs text-gray-500 mt-1">Previous models could be stopped by ollama for efficient run</p>
                     </div>
+                    
+                    <!-- Autostart Models Toggle -->
+                    <div id="autostartContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <div class="flex items-center justify-between">
+                            <span id="autostartLabel" class="text-gray-700 text-sm font-medium">Autostart models</span>
+                            <div id="autostartToggle" onclick="toggleAutostart()" class="toggle-switch bg-gray-300">
+                                <span class="toggle-knob"></span>
+                            </div>
+                        </div>
+                        <p id="autostartDesc" class="text-xs text-gray-500 mt-1">Models will be auto started when their time is ended instead of manual start</p>
+                    </div>
+                    
                     <div>
-                        <label class="text-sm text-gray-500 mb-1 block">System Prompt (optional)</label>
+                        <label id="systemPromptLabel" class="text-sm text-gray-600 mb-1 block">Global System Prompt (optional)</label>
                         <textarea id="systemPrompt" rows="3" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" placeholder="You are a helpful assistant..."></textarea>
                     </div>
                 </div>
             </div>
             
             <!-- Appearance -->
-            <div class="mb-6">
-                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                    <i class="fas fa-palette text-purple-500"></i>
-                    Appearance
-                </h4>
-                <div id="darkModeContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
-                    <span class="text-gray-700">Dark Mode</span>
-                    <button id="darkModeToggle" onclick="toggleTheme()" class="w-14 h-7 rounded-full bg-gray-300 relative transition-colors duration-300">
-                        <span id="toggleKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-all duration-300 shadow-md"></span>
-                    </button>
+            <div class="mb-4 settings-section-container">
+                <button onclick="toggleSettingsSection('appearanceSection')" class="w-full font-semibold flex items-center justify-between text-gray-900 py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <i class="fas fa-palette text-purple-500"></i>
+                        Appearance
+                    </span>
+                    <i id="appearanceSectionIcon" class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>
+                </button>
+                <div id="appearanceSection" class="space-y-3 mt-3 pl-4 collapsed" style="max-height: 0;">
+                    <div id="darkModeContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
+                        <span class="text-gray-700">Dark Mode</span>
+                        <button id="darkModeToggle" onclick="toggleTheme()" class="w-14 h-7 rounded-full bg-gray-300 relative transition-colors duration-300">
+                            <span id="toggleKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-all duration-300 shadow-md"></span>
+                        </button>
+                    </div>
+                    
+                    <!-- Fonts Heading -->
+                    <h4 id="fontsHeading" class="font-semibold text-sm text-gray-700 mt-4 mb-2 flex items-center gap-2">
+                        <i class="fas fa-font text-purple-500"></i>
+                        Fonts
+                    </h4>
+                    
+                    <!-- Interface Font -->
+                    <div id="interfaceFontContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <label id="interfaceFontLabel" class="text-sm text-gray-600 mb-2 block">Interface Font</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <select id="interfaceFontSelector" onchange="changeInterfaceFont(this.value)" class="w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none"></i>
+                            </div>
+                            <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button onclick="changeFontSize('interface', -1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-minus text-xs"></i></button>
+                                <input type="number" id="interfaceFontSize" value="14" min="10" max="24" onchange="setFontSize('interface', this.value)" class="w-12 text-center text-sm border-x border-gray-300 py-1 focus:outline-none">
+                                <button onclick="changeFontSize('interface', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Answer Font -->
+                    <div id="answerFontContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <label id="answerFontLabel" class="text-sm text-gray-600 mb-2 block">Answer Font</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <select id="answerFontSelector" onchange="changeAnswerFont(this.value)" class="w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none"></i>
+                            </div>
+                            <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button onclick="changeFontSize('answer', -1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-minus text-xs"></i></button>
+                                <input type="number" id="answerFontSize" value="14" min="10" max="24" onchange="setFontSize('answer', this.value)" class="w-12 text-center text-sm border-x border-gray-300 py-1 focus:outline-none">
+                                <button onclick="changeFontSize('answer', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Code Font -->
+                    <div id="codeFontContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <label id="codeFontLabel" class="text-sm text-gray-600 mb-2 block">Code Font</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <select id="codeFontSelector" onchange="changeCodeFont(this.value)" class="w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none"></i>
+                            </div>
+                            <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button onclick="changeFontSize('code', -1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-minus text-xs"></i></button>
+                                <input type="number" id="codeFontSize" value="13" min="10" max="24" onchange="setFontSize('code', this.value)" class="w-12 text-center text-sm border-x border-gray-300 py-1 focus:outline-none">
+                                <button onclick="changeFontSize('code', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
             <!-- Data Management -->
-            <div class="mb-6">
-                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
-                    <i class="fas fa-database text-purple-500"></i>
-                    Data Management
-                </h4>
-                <div class="space-y-2">
-                    <button onclick="exportChats()" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 hover:bg-gray-100 transition-colors text-sm flex items-center gap-2 text-gray-700">
+            <div class="mb-4 settings-section-container">
+                <button onclick="toggleSettingsSection('dataSection')" class="w-full font-semibold flex items-center justify-between text-gray-900 py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <i class="fas fa-database text-purple-500"></i>
+                        Data Management
+                    </span>
+                    <i id="dataSectionIcon" class="fas fa-chevron-down text-gray-400 text-xs transition-transform"></i>
+                </button>
+                <div id="dataSection" class="flex flex-wrap gap-2 mt-3 pl-4 collapsed" style="max-height: 0;">
+                    <button onclick="exportChats()" class="flex-1 py-2 px-3 rounded-xl border border-gray-300 hover:bg-gray-100 transition-colors text-xs flex items-center justify-center gap-1.5 text-gray-700">
                         <i class="fas fa-download"></i>
-                        Export All Chats
+                        Export
                     </button>
-                    <button onclick="clearAllData()" class="w-full py-2.5 px-4 rounded-xl border border-red-300 text-red-500 hover:bg-red-50 transition-colors text-sm flex items-center gap-2">
+                    <button onclick="confirmClearAllChats()" class="flex-1 py-2 px-3 rounded-xl border border-red-300 text-red-500 hover:bg-red-50 transition-colors text-xs flex items-center justify-center gap-1.5">
                         <i class="fas fa-trash-alt"></i>
-                        Clear All Data
+                        Erase Chats
+                    </button>
+                    <button onclick="confirmClearAllConfigs()" class="flex-1 py-2 px-3 rounded-xl border border-orange-300 text-orange-500 hover:bg-orange-50 transition-colors text-xs flex items-center justify-center gap-1.5">
+                        <i class="fas fa-redo"></i>
+                        Reset Config
                     </button>
                 </div>
             </div>
@@ -428,6 +789,9 @@
     
     <!-- Toast Container -->
     <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+    
+    <!-- Confirmation Modal Container -->
+    <div id="confirmModalContainer"></div>
 
     <script>
         // ============ Configuration & State ============
@@ -437,37 +801,190 @@
         let config = {
             apiUrl: 'http://127.0.0.1:11434',
             currentModel: '',
-            temperature: 0.7,
             systemPrompt: '',
-            theme: 'light'
+            theme: 'light',
+            allowMultipleModels: false,
+            autostartModels: false,
+            interfaceFont: 'Inter',
+            interfaceFontSize: 14,
+            answerFont: 'Inter',
+            answerFontSize: 14,
+            codeFont: 'JetBrains Mono',
+            codeFontSize: 13
         };
+        
+        // Available fonts
+        const interfaceFonts = ['Inter', 'Roboto', 'Open Sans', 'Google Sans'];
+        const answerFonts = ['Inter', 'Roboto', 'Open Sans', 'Google Sans'];
+        const codeFonts = ['JetBrains Mono', 'Fira Code', 'Source Code Pro', 'Roboto Mono', 'Google Sans Mono', 'Consolas'];
         
         let chatSessions = [];
         let currentChatId = null;
         let isGenerating = false;
+        let isModelLoading = false;
         let modelReady = false;
         let availableModels = [];
         let runningModels = [];
+        let previousRunningModels = [];
         let statusCheckInterval = null;
         let abortController = null;
-        let shouldAutoScroll = true;
+        let userHasScrolled = false;
+        let lastResponseTokens = 0;
+        let responseStartTime = null;
+        let currentTokenCount = 0;
+        let tokenSpeedInterval = null;
+        
+        // Ollama logo URL - cached
+        const OLLAMA_LOGO_URL = 'https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7';
         
         // ============ Initialization ============
         document.addEventListener('DOMContentLoaded', () => {
             loadConfig();
             loadChatSessions();
             applyTheme();
+            applyFonts();
+            updateSettingsToggles();
             initializeApp();
             setupScrollListener();
+            // Preload and cache the Ollama logo
+            preloadOllamaLogo();
         });
+        
+        function preloadOllamaLogo() {
+            // Check if we have a cached version
+            const cachedLogo = localStorage.getItem('ollama_logo_cached');
+            if (!cachedLogo) {
+                // Preload the image
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const dataURL = canvas.toDataURL('image/png');
+                        localStorage.setItem('ollama_logo_cached', dataURL);
+                    } catch (e) {
+                        console.log('Could not cache logo:', e);
+                    }
+                };
+                img.src = OLLAMA_LOGO_URL;
+            }
+        }
+        
+        function getOllamaLogoSrc() {
+            const cached = localStorage.getItem('ollama_logo_cached');
+            return cached || OLLAMA_LOGO_URL;
+        }
         
         function setupScrollListener() {
             const container = document.getElementById('messagesContainer');
+            let lastScrollTop = 0;
+            
             container.addEventListener('scroll', () => {
-                const threshold = 100;
-                const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-                shouldAutoScroll = isAtBottom;
+                const currentScrollTop = container.scrollTop;
+                const maxScroll = container.scrollHeight - container.clientHeight;
+                const distanceFromBottom = maxScroll - currentScrollTop;
+                
+                // If user scrolls up more than 100px from bottom, set flag
+                if (currentScrollTop < lastScrollTop && distanceFromBottom > 100) {
+                    userHasScrolled = true;
+                }
+                
+                // If user scrolls to near bottom (within 50px), reset flag
+                if (distanceFromBottom < 50) {
+                    userHasScrolled = false;
+                }
+                
+                lastScrollTop = currentScrollTop;
+                
+                // Update scroll navigation buttons visibility
+                updateScrollButtons();
+            }, { passive: true });
+            
+            // Also update scroll buttons on window resize
+            window.addEventListener('resize', () => {
+                updateScrollButtons();
+            }, { passive: true });
+        }
+        
+        function updateScrollButtons() {
+            // Don't update during programmatic scroll
+            if (isProgrammaticScroll) return;
+            
+            const container = document.getElementById('messagesContainer');
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+            const navContainer = document.getElementById('scrollNavContainer');
+            
+            const currentScrollTop = container.scrollTop;
+            const maxScroll = container.scrollHeight - container.clientHeight;
+            const distanceFromBottom = maxScroll - currentScrollTop;
+            
+            // Position the nav container to the left of the scrollbar
+            const containerRect = container.getBoundingClientRect();
+            // Position it 30px from the right edge of the messages container (leaving room for scrollbar)
+            navContainer.style.right = (window.innerWidth - containerRect.right + 30) + 'px';
+            navContainer.style.top = (containerRect.top + containerRect.height / 2) + 'px';
+            
+            // Show/hide top button
+            if (currentScrollTop > 200) {
+                scrollTopBtn.style.display = 'flex';
+            } else {
+                scrollTopBtn.style.display = 'none';
+            }
+            
+            // Show/hide bottom button
+            if (distanceFromBottom > 200) {
+                scrollBottomBtn.style.display = 'flex';
+            } else {
+                scrollBottomBtn.style.display = 'none';
+            }
+        }
+        
+        // Flag to track if we're in a programmatic scroll
+        let isProgrammaticScroll = false;
+        
+        function scrollToTop() {
+            const container = document.getElementById('messagesContainer');
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+            
+            // Hide both buttons during scroll animation
+            isProgrammaticScroll = true;
+            scrollTopBtn.style.display = 'none';
+            scrollBottomBtn.style.display = 'none';
+            
+            container.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            // After scroll animation completes, update buttons
+            setTimeout(() => {
+                isProgrammaticScroll = false;
+                updateScrollButtons();
+            }, 500);
+        }
+        
+        function scrollToBottom() {
+            const container = document.getElementById('messagesContainer');
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+            
+            // Hide both buttons during scroll animation
+            isProgrammaticScroll = true;
+            scrollTopBtn.style.display = 'none';
+            scrollBottomBtn.style.display = 'none';
+            
+            requestAnimationFrame(() => {
+                container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
             });
+            
+            // After scroll animation completes, update buttons
+            setTimeout(() => {
+                isProgrammaticScroll = false;
+                updateScrollButtons();
+            }, 500);
         }
         
         async function initializeApp() {
@@ -493,9 +1010,7 @@
             }
             
             document.getElementById('apiUrl').value = config.apiUrl;
-            document.getElementById('temperature').value = config.temperature;
             document.getElementById('systemPrompt').value = config.systemPrompt || '';
-            updateTempDisplay(config.temperature);
         }
         
         function saveConfig() {
@@ -504,12 +1019,279 @@
         
         function saveSettings() {
             config.apiUrl = document.getElementById('apiUrl').value;
-            config.temperature = parseFloat(document.getElementById('temperature').value);
             config.systemPrompt = document.getElementById('systemPrompt').value;
             saveConfig();
             closeSettings();
             checkOllamaStatus();
             showToast('Settings saved successfully!', 'success');
+        }
+        
+        function updateSettingsToggles() {
+            const multiToggle = document.getElementById('multiModelToggle');
+            const autostartToggle = document.getElementById('autostartToggle');
+            
+            if (config.allowMultipleModels) {
+                multiToggle.classList.add('active', 'bg-purple-500');
+                multiToggle.classList.remove('bg-gray-300');
+            } else {
+                multiToggle.classList.remove('active', 'bg-purple-500');
+                multiToggle.classList.add('bg-gray-300');
+            }
+            
+            if (config.autostartModels) {
+                autostartToggle.classList.add('active', 'bg-purple-500');
+                autostartToggle.classList.remove('bg-gray-300');
+            } else {
+                autostartToggle.classList.remove('active', 'bg-purple-500');
+                autostartToggle.classList.add('bg-gray-300');
+            }
+        }
+        
+        function toggleMultiModel() {
+            config.allowMultipleModels = !config.allowMultipleModels;
+            saveConfig();
+            updateSettingsToggles();
+        }
+        
+        function toggleAutostart() {
+            config.autostartModels = !config.autostartModels;
+            saveConfig();
+            updateSettingsToggles();
+        }
+        
+        function changeInterfaceFont(font) {
+            config.interfaceFont = font;
+            saveConfig();
+            applyFonts();
+        }
+        
+        function changeAnswerFont(font) {
+            config.answerFont = font;
+            saveConfig();
+            applyFonts();
+        }
+        
+        function changeCodeFont(font) {
+            config.codeFont = font;
+            saveConfig();
+            applyFonts();
+        }
+        
+        function applyFonts() {
+            document.documentElement.style.setProperty('--interface-font', config.interfaceFont);
+            document.documentElement.style.setProperty('--interface-font-size', config.interfaceFontSize + 'px');
+            document.documentElement.style.setProperty('--answer-font', config.answerFont);
+            document.documentElement.style.setProperty('--answer-font-size', config.answerFontSize + 'px');
+            document.documentElement.style.setProperty('--code-font', config.codeFont);
+            document.documentElement.style.setProperty('--code-font-size', config.codeFontSize + 'px');
+        }
+        
+        function changeFontSize(type, delta) {
+            const input = document.getElementById(type + 'FontSize');
+            let newSize = parseInt(input.value) + delta;
+            newSize = Math.max(10, Math.min(24, newSize));
+            input.value = newSize;
+            setFontSize(type, newSize);
+        }
+        
+        function setFontSize(type, size) {
+            size = parseInt(size);
+            size = Math.max(10, Math.min(24, size));
+            
+            if (type === 'interface') {
+                config.interfaceFontSize = size;
+            } else if (type === 'answer') {
+                config.answerFontSize = size;
+            } else if (type === 'code') {
+                config.codeFontSize = size;
+            }
+            
+            saveConfig();
+            applyFonts();
+        }
+        
+        function populateFontSelectors() {
+            const interfaceSelector = document.getElementById('interfaceFontSelector');
+            const answerSelector = document.getElementById('answerFontSelector');
+            const codeSelector = document.getElementById('codeFontSelector');
+            const isDark = config.theme === 'dark';
+            
+            // Populate interface fonts
+            if (interfaceSelector) {
+                interfaceSelector.innerHTML = interfaceFonts.map(font => 
+                    `<option value="${font}" ${font === config.interfaceFont ? 'selected' : ''} style="font-family: '${font}'">${font}</option>`
+                ).join('');
+            }
+            
+            // Populate answer fonts
+            if (answerSelector) {
+                answerSelector.innerHTML = answerFonts.map(font => 
+                    `<option value="${font}" ${font === config.answerFont ? 'selected' : ''} style="font-family: '${font}'">${font}</option>`
+                ).join('');
+            }
+            
+            // Populate code fonts
+            if (codeSelector) {
+                codeSelector.innerHTML = codeFonts.map(font => 
+                    `<option value="${font}" ${font === config.codeFont ? 'selected' : ''} style="font-family: '${font}'">${font}</option>`
+                ).join('');
+            }
+            
+            // Update font size inputs
+            const interfaceSizeInput = document.getElementById('interfaceFontSize');
+            const answerSizeInput = document.getElementById('answerFontSize');
+            const codeSizeInput = document.getElementById('codeFontSize');
+            
+            if (interfaceSizeInput) interfaceSizeInput.value = config.interfaceFontSize;
+            if (answerSizeInput) answerSizeInput.value = config.answerFontSize;
+            if (codeSizeInput) codeSizeInput.value = config.codeFontSize;
+            
+            // Apply theme to selectors
+            const selectClass = `w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            if (interfaceSelector) interfaceSelector.className = selectClass;
+            if (answerSelector) answerSelector.className = selectClass;
+            if (codeSelector) codeSelector.className = selectClass;
+            
+            // Apply theme to font size controls
+            const sizeInputClass = `w-12 text-center text-sm border-x py-1 focus:outline-none ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            const sizeBtnClass = `px-2 py-1 ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`;
+            const sizeContainerClass = `flex items-center border rounded-lg overflow-hidden ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-white'}`;
+            
+            if (interfaceSizeInput) {
+                interfaceSizeInput.className = sizeInputClass;
+                interfaceSizeInput.parentElement.className = sizeContainerClass;
+                interfaceSizeInput.previousElementSibling.className = sizeBtnClass;
+                interfaceSizeInput.nextElementSibling.className = sizeBtnClass;
+            }
+            if (answerSizeInput) {
+                answerSizeInput.className = sizeInputClass;
+                answerSizeInput.parentElement.className = sizeContainerClass;
+                answerSizeInput.previousElementSibling.className = sizeBtnClass;
+                answerSizeInput.nextElementSibling.className = sizeBtnClass;
+            }
+            if (codeSizeInput) {
+                codeSizeInput.className = sizeInputClass;
+                codeSizeInput.parentElement.className = sizeContainerClass;
+                codeSizeInput.previousElementSibling.className = sizeBtnClass;
+                codeSizeInput.nextElementSibling.className = sizeBtnClass;
+            }
+        }
+        
+        // ============ System Prompt Popup ============
+        function toggleSystemPromptPopup() {
+            const popup = document.getElementById('systemPromptPopup');
+            const isHidden = popup.classList.contains('hidden');
+            
+            if (isHidden) {
+                popup.classList.remove('hidden');
+                // Load current chat's system prompt
+                const chat = chatSessions.find(c => c.id === currentChatId);
+                document.getElementById('chatSystemPrompt').value = chat?.systemPrompt || '';
+            } else {
+                popup.classList.add('hidden');
+            }
+            
+            applyThemeToSystemPromptPopup();
+        }
+        
+        function closeSystemPromptPopup() {
+            // Auto-save on close
+            const chat = chatSessions.find(c => c.id === currentChatId);
+            if (chat) {
+                const newPrompt = document.getElementById('chatSystemPrompt').value;
+                if (chat.systemPrompt !== newPrompt) {
+                    chat.systemPrompt = newPrompt;
+                    saveChatSessions();
+                    if (newPrompt) {
+                        showToast('System prompt saved', 'success');
+                    }
+                }
+            }
+            document.getElementById('systemPromptPopup').classList.add('hidden');
+        }
+        
+        function applyThemeToSystemPromptPopup() {
+            const isDark = config.theme === 'dark';
+            const popup = document.getElementById('systemPromptPopup');
+            popup.className = `system-prompt-popup ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} ${popup.classList.contains('hidden') ? 'hidden' : ''}`;
+            
+            const title = popup.querySelector('h4');
+            if (title) title.className = `font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`;
+            
+            const desc = popup.querySelector('p');
+            if (desc) desc.className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2`;
+            
+            const textarea = document.getElementById('chatSystemPrompt');
+            if (textarea) textarea.className = `w-full py-3 px-4 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+        }
+        
+        // ============ Confirmation Dialogs ============
+        function showConfirmDialog(title, message, onConfirm, confirmText = 'Confirm', isDanger = false) {
+            const isDark = config.theme === 'dark';
+            const container = document.getElementById('confirmModalContainer');
+            
+            container.innerHTML = `
+                <div class="confirm-modal" onclick="closeConfirmDialog(event)">
+                    <div class="confirm-modal-content ${isDark ? 'dark' : ''}" onclick="event.stopPropagation()">
+                        <h3 class="text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}">${title}</h3>
+                        <p class="text-sm mb-4 ${isDark ? 'text-gray-300' : 'text-gray-600'}">${message}</p>
+                        <div class="flex gap-3 justify-end">
+                            <button onclick="closeConfirmDialog()" class="px-4 py-2 rounded-lg text-sm font-medium ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-colors">
+                                Cancel
+                            </button>
+                            <button onclick="executeConfirmAction()" class="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors ${isDanger ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-500 hover:bg-purple-600'}">
+                                ${confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            window.pendingConfirmAction = onConfirm;
+        }
+        
+        function closeConfirmDialog(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('confirmModalContainer').innerHTML = '';
+            window.pendingConfirmAction = null;
+        }
+        
+        function executeConfirmAction() {
+            if (window.pendingConfirmAction) {
+                window.pendingConfirmAction();
+            }
+            closeConfirmDialog();
+        }
+        
+        function confirmDeleteChat(chatId, event) {
+            event.stopPropagation();
+            showConfirmDialog(
+                'Delete Chat',
+                'Are you sure you want to delete this chat? This action cannot be undone.',
+                () => deleteChat(chatId),
+                'Delete',
+                true
+            );
+        }
+        
+        function confirmClearAllChats() {
+            showConfirmDialog(
+                'Clear All Chats',
+                'Are you sure you want to delete all chats? This action cannot be undone.',
+                () => clearAllChats(),
+                'Delete All',
+                true
+            );
+        }
+        
+        function confirmClearAllConfigs() {
+            showConfirmDialog(
+                'Clear All Configs',
+                'Are you sure you want to reset all settings to default? This will not affect your chats or ollama models.',
+                () => clearAllConfigs(),
+                'Reset',
+                true
+            );
         }
         
         // ============ Chat Sessions Management ============
@@ -530,6 +1312,7 @@
                 title: 'New Chat',
                 messages: [],
                 model: config.currentModel,
+                systemPrompt: '',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -539,7 +1322,8 @@
             currentChatId = newChat.id;
             
             document.getElementById('chatTitle').textContent = 'New Chat';
-            document.getElementById('chatSubtitle').textContent = 'Start a conversation';
+            document.getElementById('chatMessageCount').textContent = '0 messages';
+            document.getElementById('chatTokenCount').textContent = '0 tokens';
             
             const messagesDiv = document.getElementById('messages');
             messagesDiv.innerHTML = '';
@@ -593,17 +1377,26 @@
             
             if (chat) {
                 document.getElementById('chatTitle').textContent = chat.title;
-                document.getElementById('chatSubtitle').textContent = 
-                    chat.messages.length > 0 ? `${chat.messages.length} messages` : 'Start a conversation';
+                updateChatStats(chat);
                 
                 renderMessages(chat.messages);
                 renderChatSessions();
             }
         }
         
-        function deleteChat(chatId, event) {
-            event.stopPropagation();
-            
+        function updateChatStats(chat) {
+            let totalTokens = 0;
+            // Count all tokens (user + assistant)
+            chat.messages.forEach(msg => {
+                if (msg.tokens && typeof msg.tokens === 'number') {
+                    totalTokens += msg.tokens;
+                }
+            });
+            document.getElementById('chatMessageCount').textContent = `${chat.messages.length} messages`;
+            document.getElementById('chatTokenCount').textContent = `${totalTokens} tokens`;
+        }
+        
+        function deleteChat(chatId) {
             chatSessions = chatSessions.filter(c => c.id !== chatId);
             saveChatSessions();
             
@@ -618,21 +1411,6 @@
             renderChatSessions();
             updateTotalMessagesCount();
             showToast('Chat deleted', 'success');
-        }
-        
-        function clearCurrentChat() {
-            if (!currentChatId) return;
-            
-            const chat = chatSessions.find(c => c.id === currentChatId);
-            if (chat) {
-                chat.messages = [];
-                chat.title = 'New Chat';
-                chat.updatedAt = new Date().toISOString();
-                saveChatSessions();
-                loadChat(currentChatId);
-                updateTotalMessagesCount();
-                showToast('Chat cleared', 'success');
-            }
         }
         
         function updateTotalMessagesCount() {
@@ -673,7 +1451,7 @@
                             <p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}">${formatDate(chat.updatedAt)} • ${chat.messages.length} msg</p>
                         </div>
                         <button 
-                            onclick="deleteChat('${chat.id}', event)"
+                            onclick="confirmDeleteChat('${chat.id}', event)"
                             class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg ${isDark ? 'hover:bg-red-900/50' : 'hover:bg-red-100'} transition-all"
                         >
                             <i class="fas fa-trash text-xs text-red-500"></i>
@@ -702,7 +1480,7 @@
                 
                 if (availableModels.length === 0) {
                     document.getElementById('modelSelector').innerHTML = '<option value="">No models found</option>';
-                    document.getElementById('loadModelBtn').classList.add('hidden');
+                    document.getElementById('loadModelBtn').style.display = 'none';
                     return false;
                 }
                 
@@ -729,7 +1507,7 @@
             } catch (error) {
                 console.error('Connection error:', error);
                 document.getElementById('modelSelector').innerHTML = '<option value="">Connection failed</option>';
-                document.getElementById('loadModelBtn').classList.add('hidden');
+                document.getElementById('loadModelBtn').style.display = 'none';
                 document.getElementById('runningModelsList').innerHTML = '<p class="text-xs text-red-400 text-center py-2">Ollama not running</p>';
                 modelReady = false;
                 updateSendButton();
@@ -747,7 +1525,20 @@
                 if (!response.ok) throw new Error('Failed to get running models');
                 
                 const data = await response.json();
-                runningModels = data.models || [];
+                const newRunningModels = data.models || [];
+                
+                // Check if any model just stopped (for autostart)
+                if (config.autostartModels && previousRunningModels.length > 0 && newRunningModels.length === 0) {
+                    // Model just stopped, auto-restart it after 1 second
+                    setTimeout(() => {
+                        if (config.currentModel && !isModelLoading) {
+                            autoLoadModel();
+                        }
+                    }, 1000);
+                }
+                
+                previousRunningModels = [...runningModels];
+                runningModels = newRunningModels;
                 
                 renderRunningModels();
                 
@@ -760,11 +1551,17 @@
                 
                 if (selectedRunning) {
                     modelReady = true;
-                    loadBtn.classList.add('hidden');
+                    loadBtn.style.display = 'none';
+                    // Reset loading state when model is running
+                    isModelLoading = false;
                 } else {
                     modelReady = false;
-                    loadBtn.classList.remove('hidden');
-                    loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+                    // Always show and enable button when model is not running and not currently loading
+                    if (!isModelLoading) {
+                        loadBtn.style.display = 'flex';
+                        loadBtn.disabled = false;
+                        loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+                    }
                 }
                 
                 updateSendButton();
@@ -775,12 +1572,23 @@
             }
         }
         
+        
         function renderRunningModels() {
             const container = document.getElementById('runningModelsList');
             const countEl = document.getElementById('runningModelsCount');
             const isDark = config.theme === 'dark';
             
             countEl.textContent = runningModels.length.toString();
+            countEl.className = `text-xs px-2 py-0.5 rounded-full font-medium ${runningModels.length > 0 ? (isDark ? 'bg-green-900/50 text-green-400' : 'bg-green-100 text-green-600') : (isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500')}`;
+            
+            // Adjust max-height based on number of models (show 2 without scrollbar, scrollbar from 3rd)
+            if (runningModels.length <= 2) {
+                container.style.maxHeight = 'none';
+                container.style.overflowY = 'visible';
+            } else {
+                container.style.maxHeight = '280px';
+                container.style.overflowY = 'auto';
+            }
             
             if (runningModels.length === 0) {
                 container.innerHTML = `<p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center py-2">No models running</p>`;
@@ -790,7 +1598,6 @@
             container.innerHTML = runningModels.map(model => {
                 const modelName = model.name || model.model || 'Unknown';
                 const isSelected = modelName === config.currentModel;
-                const shortName = modelName.length > 18 ? modelName.substring(0, 18) + '...' : modelName;
                 
                 // Get actual values from ollama ps response
                 const size = model.size || 0;
@@ -802,13 +1609,11 @@
                 
                 // Get details
                 const parameterSize = model.details?.parameter_size || 'N/A';
-                const quantization = model.details?.quantization_level || '';
                 
                 // Calculate times from expires_at
                 const expiresAt = model.expires_at ? new Date(model.expires_at) : null;
                 const now = new Date();
                 
-                // Estimate started time (expires_at - 5 minutes default keep_alive)
                 let startedTime = 'N/A';
                 let untilTime = 'N/A';
                 
@@ -825,23 +1630,37 @@
                     
                     // Estimate start time (5 min before expiry by default)
                     const startedDate = new Date(expiresAt.getTime() - (5 * 60 * 1000));
-                    startedTime = startedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    startedTime = formatTime12hr(startedDate);
                 }
                 
                 return `
-                    <div class="model-card ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} ${isSelected ? 'ring-2 ring-purple-500' : ''}">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-1.5 flex-1 min-w-0">
-                                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
-                                <span class="model-name-tooltip text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'} truncate" data-fullname="${modelName}" title="${modelName}">${shortName}</span>
-                            </div>
-                            <div class="flex items-center gap-1 flex-shrink-0">
-                                ${isSelected ? '<span class="text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded">Active</span>' : `<button onclick="selectRunningModel('${modelName}')" class="p-1 rounded hover:bg-purple-100 ${isDark ? 'hover:bg-purple-900/30' : ''} transition-colors" title="Use this model"><i class="fas fa-check-circle text-purple-500 text-xs"></i></button>`}
-                                <button onclick="stopModel('${modelName}')" class="p-1 rounded hover:bg-red-100 ${isDark ? 'hover:bg-red-900/30' : ''} transition-colors" title="Stop model">
-                                    <i class="fas fa-stop text-red-500 text-xs"></i>
-                                </button>
-                            </div>
+                    <div class="model-card ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} ${isSelected ? 'border-purple-500 border-2' : ''}">
+                        <!-- Model Name Row -->
+                        <div class="flex items-center gap-1.5 mb-2">
+                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
+                            <span class="text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex-1 break-all" title="${modelName}">${modelName}</span>
                         </div>
+                        
+                        <!-- Action Buttons Row -->
+                        <div class="flex items-center gap-2 mb-2">
+                            ${isSelected ? `
+                                <span class="flex items-center gap-1 text-xs bg-purple-500 text-white px-2 py-1 rounded-full">
+                                    <i class="fas fa-check text-[0.6rem]"></i>
+                                    Active
+                                </span>
+                            ` : `
+                                <button onclick="selectRunningModel('${modelName}')" class="flex items-center gap-1 text-xs ${isDark ? 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-600 hover:bg-purple-200'} px-2 py-1 rounded-full transition-colors">
+                                    <i class="fas fa-play text-[0.6rem]"></i>
+                                    Use model
+                                </button>
+                            `}
+                            <button onclick="stopModel('${modelName}', this)" class="flex items-center gap-1 text-xs ${isDark ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50' : 'bg-red-100 text-red-500 hover:bg-red-200'} px-2 py-1 rounded-full transition-colors">
+                                <i class="fas fa-stop text-[0.6rem]"></i>
+                                Stop
+                            </button>
+                        </div>
+                        
+                        <!-- Stats Grid -->
                         <div class="grid grid-cols-3 gap-1 text-center">
                             <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
                                 <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Size</p>
@@ -856,7 +1675,7 @@
                                 <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${gpuPercent}%</p>
                             </div>
                             <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Context</p>
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Params</p>
                                 <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${parameterSize}</p>
                             </div>
                             <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
@@ -873,7 +1692,14 @@
             }).join('');
         }
         
-        async function stopModel(modelName) {
+        async function stopModel(modelName, btnElement) {
+            // Disable the button to prevent multiple clicks
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.classList.add('opacity-50', 'cursor-not-allowed');
+                btnElement.innerHTML = '<i class="fas fa-spinner fa-spin text-[0.6rem]"></i> Stopping';
+            }
+            
             try {
                 showToast(`Stopping ${modelName}...`, 'info');
                 
@@ -891,77 +1717,173 @@
                 if (!response.ok) throw new Error('Failed to stop model');
                 
                 showToast(`Model ${modelName} stopped`, 'success');
+                
+                // Reset isModelLoading to allow starting new models
+                isModelLoading = false;
+                
+                // Reset and show the Start Model button
+                const loadBtn = document.getElementById('loadModelBtn');
+                if (loadBtn) {
+                    loadBtn.disabled = false;
+                    loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+                    loadBtn.style.display = 'flex';
+                }
+                
                 await checkRunningModels();
                 
             } catch (error) {
                 console.error('Error stopping model:', error);
                 showToast('Failed to stop model', 'error');
+                // Re-enable button on error
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.classList.remove('opacity-50', 'cursor-not-allowed');
+                    btnElement.innerHTML = '<i class="fas fa-stop text-[0.6rem]"></i> Stop';
+                }
             }
         }
         
         async function loadModel() {
-            if (!config.currentModel) {
+            const loadBtn = document.getElementById('loadModelBtn');
+            
+            // Prevent multiple presses
+            if (isModelLoading) {
+                showToast('Model is already loading...', 'warning');
+                return;
+            }
+            
+            // Get the currently selected model from the dropdown
+            const selector = document.getElementById('modelSelector');
+            const selectedModel = selector ? selector.value : config.currentModel;
+            
+            if (!loadBtn) {
+                console.error('Load button not found');
+                return;
+            }
+            
+            if (!selectedModel) {
                 showToast('Please select a model first', 'error');
                 return;
             }
             
-            const loadBtn = document.getElementById('loadModelBtn');
+            // Update config with selected model
+            config.currentModel = selectedModel;
+            saveConfig();
+            
+            // Stop previous models if multiple models not allowed
+            if (!config.allowMultipleModels && runningModels.length > 0) {
+                for (const model of runningModels) {
+                    const modelName = model.name || model.model;
+                    if (modelName !== selectedModel) {
+                        await stopModel(modelName, null);
+                    }
+                }
+            }
+            
+            isModelLoading = true;
             loadBtn.disabled = true;
             loadBtn.innerHTML = '<i class="fas fa-spinner animate-spin"></i><span>Loading...</span>';
             
-            showToast(`Loading ${config.currentModel}...`, 'info');
+            showToast(`Loading ${selectedModel}...`, 'info');
             
             try {
-                const response = await fetch(`${config.apiUrl}/api/generate`, {
+                // Use /api/chat to warm up the model
+                const response = await fetch(`${config.apiUrl}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        model: config.currentModel,
-                        prompt: '',
+                        model: selectedModel,
+                        messages: [{ role: 'user', content: 'hi' }],
                         stream: false
                     })
                 });
                 
-                if (!response.ok) throw new Error('Failed to load model');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Load model response error:', errorText);
+                    throw new Error(`Failed to load model: ${response.status}`);
+                }
                 
-                showToast(`Model ${config.currentModel} loaded!`, 'success');
+                const data = await response.json();
+                console.log('Model loaded successfully:', data);
+                
+                showToast(`Model ${selectedModel} loaded!`, 'success');
+                
+                // Give ollama a moment to update its internal state
+                await new Promise(resolve => setTimeout(resolve, 500));
                 await checkRunningModels();
                 
             } catch (error) {
                 console.error('Error loading model:', error);
-                showToast('Failed to load model', 'error');
+                showToast(`Failed to load model: ${error.message}`, 'error');
+                loadBtn.disabled = false;
+                loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+            } finally {
+                isModelLoading = false;
             }
-            
-            loadBtn.disabled = false;
-            loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
         }
         
         async function autoLoadModel() {
-            if (!config.currentModel) return false;
+            // Prevent multiple loads
+            if (isModelLoading) {
+                return false;
+            }
             
-            showToast(`Auto-starting ${config.currentModel}...`, 'info');
+            // Get the currently selected model from the dropdown or config
+            const selector = document.getElementById('modelSelector');
+            const modelToLoad = selector ? selector.value : config.currentModel;
+            
+            if (!modelToLoad) return false;
+            
+            // Update config
+            config.currentModel = modelToLoad;
+            saveConfig();
+            
+            isModelLoading = true;
+            
+            // Stop previous models if multiple models not allowed
+            if (!config.allowMultipleModels && runningModels.length > 0) {
+                for (const model of runningModels) {
+                    const modelName = model.name || model.model;
+                    if (modelName !== modelToLoad) {
+                        await stopModel(modelName, null);
+                    }
+                }
+            }
+            
+            showToast(`Auto-starting ${modelToLoad}...`, 'info');
             
             try {
-                const response = await fetch(`${config.apiUrl}/api/generate`, {
+                // Use /api/chat to warm up the model
+                const response = await fetch(`${config.apiUrl}/api/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        model: config.currentModel,
-                        prompt: '',
+                        model: modelToLoad,
+                        messages: [{ role: 'user', content: 'hi' }],
                         stream: false
                     })
                 });
                 
-                if (!response.ok) throw new Error('Failed to load model');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Auto-load model response error:', errorText);
+                    throw new Error(`Failed to load model: ${response.status}`);
+                }
                 
-                showToast(`Model ${config.currentModel} ready!`, 'success');
+                showToast(`Model ${modelToLoad} ready!`, 'success');
+                
+                // Give ollama a moment to update its internal state
+                await new Promise(resolve => setTimeout(resolve, 500));
                 await checkRunningModels();
                 return true;
                 
             } catch (error) {
                 console.error('Error auto-loading model:', error);
-                showToast('Failed to auto-start model', 'error');
+                showToast(`Failed to auto-start model: ${error.message}`, 'error');
                 return false;
+            } finally {
+                isModelLoading = false;
             }
         }
         
@@ -996,12 +1918,25 @@
             btn.innerHTML = '<i class="fas fa-sync-alt"></i> Test Connection';
         }
         
-        function changeModel(modelName) {
+        async function changeModel(modelName) {
             if (!modelName) return;
             config.currentModel = modelName;
             saveConfig();
-            checkRunningModels();
-            showToast(`Selected ${modelName}`, 'info');
+            
+            // Check if the model is already running
+            const isRunning = runningModels.find(m => 
+                m.name === modelName || m.model === modelName
+            );
+            
+            if (isRunning) {
+                // Model already running, just select it
+                await checkRunningModels();
+                showToast(`Switched to ${modelName}`, 'success');
+            } else {
+                // Model not running, update UI to show Start button
+                await checkRunningModels();
+                showToast(`Selected ${modelName} - click Start Model to load`, 'info');
+            }
         }
         
         function selectRunningModel(modelName) {
@@ -1031,7 +1966,6 @@
         
         function updateModelDisplay() {
             const display = document.getElementById('currentModelDisplay');
-            const settingsModel = document.getElementById('settingsCurrentModel');
             
             if (modelReady) {
                 display.textContent = `✓ ${config.currentModel}`;
@@ -1043,8 +1977,6 @@
                 display.textContent = 'No model selected';
                 display.className = 'font-medium text-red-500';
             }
-            
-            settingsModel.textContent = config.currentModel || 'None selected';
         }
         
         function updateSendButton() {
@@ -1072,6 +2004,12 @@
                 return;
             }
             
+            // Prevent sending if model is currently loading
+            if (isModelLoading) {
+                showToast('Please wait for the model to load', 'warning');
+                return;
+            }
+            
             // Auto-load model if not running
             if (!modelReady) {
                 if (!config.currentModel) {
@@ -1082,6 +2020,15 @@
                 const loaded = await autoLoadModel();
                 if (!loaded) {
                     showToast('Could not start the model. Please try manually.', 'error');
+                    return;
+                }
+                
+                // Wait for model to be fully ready
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await checkRunningModels();
+                
+                if (!modelReady) {
+                    showToast('Model not ready yet. Please try again.', 'warning');
                     return;
                 }
             }
@@ -1101,7 +2048,8 @@
             chat.messages.push({
                 role: 'user',
                 content: message,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                tokens: 0
             });
             
             if (chat.messages.length === 1) {
@@ -1117,7 +2065,7 @@
             input.value = '';
             input.style.height = 'auto';
             
-            shouldAutoScroll = true;
+            userHasScrolled = false;
             await generateResponse(chat);
         }
         
@@ -1132,6 +2080,8 @@
         async function generateResponse(chat) {
             isGenerating = true;
             abortController = new AbortController();
+            currentTokenCount = 0;
+            responseStartTime = Date.now();
             updateSendButton();
             
             const sendIcon = document.getElementById('sendIcon');
@@ -1144,10 +2094,18 @@
             const assistantMsg = {
                 role: 'assistant',
                 content: '',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                tokens: 0,
+                promptTokens: 0,
+                responseTime: 0
             };
             chat.messages.push(assistantMsg);
             renderMessages(chat.messages, true);
+            
+            // Start token speed tracking
+            tokenSpeedInterval = setInterval(() => {
+                updateTokenSpeed();
+            }, 500);
             
             try {
                 const messages = chat.messages.slice(0, -1).map(m => ({
@@ -1155,10 +2113,12 @@
                     content: m.content
                 }));
                 
-                if (config.systemPrompt) {
+                // Use chat-specific system prompt if available, otherwise use global
+                const systemPrompt = chat.systemPrompt || config.systemPrompt;
+                if (systemPrompt) {
                     messages.unshift({
                         role: 'system',
-                        content: config.systemPrompt
+                        content: systemPrompt
                     });
                 }
                 
@@ -1168,10 +2128,7 @@
                     body: JSON.stringify({
                         model: config.currentModel,
                         messages: messages,
-                        stream: true,
-                        options: {
-                            temperature: config.temperature
-                        }
+                        stream: true
                     }),
                     signal: abortController.signal
                 });
@@ -1195,7 +2152,22 @@
                             const data = JSON.parse(line);
                             if (data.message?.content) {
                                 assistantMsg.content += data.message.content;
-                                updateLastMessage(assistantMsg.content);
+                                currentTokenCount++;
+                                updateLastMessage(assistantMsg.content, true);
+                            }
+                            // Get actual token counts from final response
+                            if (data.done === true) {
+                                if (data.eval_count) {
+                                    assistantMsg.tokens = data.eval_count;
+                                }
+                                // Set user message tokens from prompt_eval_count
+                                if (data.prompt_eval_count && chat.messages.length >= 2) {
+                                    const userMsgIdx = chat.messages.length - 2;
+                                    if (chat.messages[userMsgIdx].role === 'user') {
+                                        const userContent = chat.messages[userMsgIdx].content;
+                                        chat.messages[userMsgIdx].tokens = Math.ceil(userContent.split(/\s+/).length);
+                                    }
+                                }
                             }
                         } catch (e) {
                             // Skip invalid JSON lines
@@ -1206,14 +2178,23 @@
             } catch (error) {
                 if (error.name === 'AbortError') {
                     assistantMsg.content += '\n\n⏹️ *Generation stopped by user*';
-                    updateLastMessage(assistantMsg.content);
+                    updateLastMessage(assistantMsg.content, false);
                 } else {
                     console.error('Generation error:', error);
                     assistantMsg.content = '❌ Error: Failed to generate response. Please check if the model is loaded and try again.';
-                    updateLastMessage(assistantMsg.content);
+                    updateLastMessage(assistantMsg.content, false);
                     showToast('Failed to generate response', 'error');
                 }
             }
+            
+            // Clear token speed interval
+            if (tokenSpeedInterval) {
+                clearInterval(tokenSpeedInterval);
+                tokenSpeedInterval = null;
+            }
+            
+            // Set final response time
+            assistantMsg.responseTime = Date.now() - responseStartTime;
             
             chat.updatedAt = new Date().toISOString();
             saveChatSessions();
@@ -1230,7 +2211,19 @@
             updateSendButton();
             
             document.getElementById('chatTitle').textContent = chat.title;
-            document.getElementById('chatSubtitle').textContent = `${chat.messages.length} messages`;
+            updateChatStats(chat);
+            
+            // Re-render to show final token count and response time
+            renderMessages(chat.messages);
+        }
+        
+        function updateTokenSpeed() {
+            const tokenSpeedEl = document.getElementById('liveTokenSpeed');
+            if (tokenSpeedEl && responseStartTime) {
+                const elapsedSecs = (Date.now() - responseStartTime) / 1000;
+                const tokensPerSec = elapsedSecs > 0 ? (currentTokenCount / elapsedSecs).toFixed(1) : 0;
+                tokenSpeedEl.textContent = `${tokensPerSec} tok/s`;
+            }
         }
         
         function sendQuickMessage(message) {
@@ -1253,41 +2246,78 @@
                 const isLast = idx === messages.length - 1;
                 const isAssistant = msg.role === 'assistant';
                 const showTyping = isStreaming && isLast && isAssistant && !msg.content;
+                const showTokenSpeed = isStreaming && isLast && isAssistant && msg.content;
+                // Show tokens for both user and assistant messages
+                const tokens = msg.tokens || 0;
+                const responseTime = msg.responseTime || 0;
+                
+                // Format response time
+                let responseTimeStr = '';
+                if (isAssistant && responseTime > 0) {
+                    responseTimeStr = ` • ${formatDuration(responseTime)}`;
+                }
+                
+                // Official Ollama logo
+                const ollamaLogo = `<div class="ollama-logo">
+                    <img src="https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7" alt="Ollama" onerror="this.parentElement.style.background='#000';this.parentElement.innerHTML='<i class=\\'fas fa-robot text-white text-lg\\'></i>'" />
+                </div>`;
                 
                 return `
                     <div class="message-enter flex gap-4 ${isAssistant ? '' : 'flex-row-reverse'}">
-                        <div class="w-10 h-10 rounded-xl ${isAssistant ? 'gradient-bg' : (isDark ? 'bg-gray-700' : 'bg-gray-300')} flex items-center justify-center flex-shrink-0 shadow-md">
-                            <i class="fas ${isAssistant ? 'fa-robot text-white' : 'fa-user ' + (isDark ? 'text-gray-300' : 'text-gray-600')} text-sm"></i>
-                        </div>
+                        ${isAssistant ? ollamaLogo : `
+                            <div class="w-10 h-10 rounded-xl ${isDark ? 'bg-gray-700' : 'bg-gray-300'} flex items-center justify-center flex-shrink-0 shadow-md">
+                                <i class="fas fa-user ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm"></i>
+                            </div>
+                        `}
                         <div class="flex-1 max-w-[80%] ${isAssistant ? '' : 'flex flex-col items-end'}">
-                            <div class="rounded-2xl p-4 ${isAssistant ? (isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900 border border-gray-200') : 'gradient-bg text-white'} shadow-sm" ${isLast && isAssistant ? 'id="lastMessage"' : ''}>
+                            <div class="rounded-2xl p-4 ${isAssistant ? (isDark ? 'bg-gray-700 text-gray-100' : 'bg-white text-gray-900 border border-gray-200') : 'gradient-bg text-white'} shadow-sm ${isAssistant ? 'ai-message-content' : ''}" ${isLast && isAssistant ? 'id="lastMessage"' : ''}>
                                 ${showTyping ? `
                                     <div class="flex items-center gap-1.5 py-1">
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                     </div>
-                                ` : formatMessage(msg.content)}
+                                ` : formatMessage(msg.content, isStreaming && isLast && isAssistant)}
                             </div>
-                            <p class="text-xs mt-1 px-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}">${formatTime(msg.timestamp)}</p>
+                            <div class="flex items-center gap-2 mt-1 px-2">
+                                <p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}">
+                                    ${formatTime12hr(new Date(msg.timestamp))}${tokens > 0 ? ` • ${tokens} tokens` : ''}${responseTimeStr}
+                                </p>
+                                ${showTokenSpeed ? `
+                                    <span id="liveTokenSpeed" class="token-speed ${isDark ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-600'}">
+                                        <i class="fas fa-bolt text-[0.5rem]"></i>
+                                        0 tok/s
+                                    </span>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
             
+            // Apply syntax highlighting
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+            
             attachCopyListeners();
-            if (shouldAutoScroll) {
-                scrollToBottom();
+            if (!userHasScrolled) {
+                scrollToBottomInstant();
             }
+            updateScrollButtons();
         }
         
-        function updateLastMessage(content) {
+        function updateLastMessage(content, isStreaming = false) {
             const el = document.getElementById('lastMessage');
             if (el) {
-                el.innerHTML = formatMessage(content);
+                el.innerHTML = formatMessage(content, isStreaming);
+                // Apply syntax highlighting
+                el.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
                 attachCopyListeners();
-                if (shouldAutoScroll) {
-                    scrollToBottom();
+                if (!userHasScrolled) {
+                    scrollToBottomInstant();
                 }
             }
         }
@@ -1299,6 +2329,7 @@
                         btn.setAttribute('data-listener', 'true');
                         btn.addEventListener('click', function() {
                             const codeBlock = this.closest('pre').querySelector('code');
+                            // Get raw text content, preserving formatting
                             const code = codeBlock.textContent;
                             navigator.clipboard.writeText(code).then(() => {
                                 const originalText = this.textContent;
@@ -1313,23 +2344,25 @@
             }, 50);
         }
         
-        function formatMessage(content) {
+        function formatMessage(content, isStreaming = false) {
             if (!content) return '';
             
-            let formatted = escapeHtml(content);
             const isDark = config.theme === 'dark';
+            const copyLabel = 'Copy';
             
-            // Code blocks with "Copy code" chip
-            formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-                const langLabel = lang || 'code';
-                return `<pre class="${isDark ? 'bg-gray-900' : 'bg-gray-100'} rounded-lg my-2 overflow-x-auto relative">
-                    <span class="copy-code-chip ${isDark ? 'text-gray-400 border-gray-600 hover:text-gray-200 hover:border-gray-400' : 'text-gray-500 border-gray-300 hover:text-gray-700 hover:border-gray-500'}">Copy code</span>
-                    <code class="language-${langLabel}">${code.trim()}</code>
-                </pre>`;
+            // Extract code blocks first (handle with or without newline after ```)
+            const codeBlocks = [];
+            let tempContent = content.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+                const index = codeBlocks.length;
+                codeBlocks.push({ lang: lang || 'plaintext', code: code });
+                return `<<<CODEBLOCK_${index}>>>`;
             });
             
-            // Inline code
-            formatted = formatted.replace(/`([^`]+)`/g, `<code class="px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'} text-sm font-mono">$1</code>`);
+            // Escape HTML for non-code content
+            let formatted = escapeHtml(tempContent);
+            
+            // Inline code (before putting code blocks back)
+            formatted = formatted.replace(/`([^`]+)`/g, `<code class="px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-200'} text-sm font-mono">$1</code>`);
             
             // Bold
             formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -1340,14 +2373,22 @@
             // Line breaks
             formatted = formatted.replace(/\n/g, '<br>');
             
+            // Put code blocks back with proper formatting
+            codeBlocks.forEach((block, index) => {
+                // Don't escape - let highlight.js handle it, but we need to preserve the raw code
+                const rawCode = block.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const codeHtml = `<pre><span class="copy-code-chip">${copyLabel}</span><code class="language-${block.lang}">${rawCode}</code></pre>`;
+                formatted = formatted.replace(`&lt;&lt;&lt;CODEBLOCK_${index}&gt;&gt;&gt;`, codeHtml);
+            });
+            
             return formatted;
         }
         
-        function scrollToBottom() {
+        function scrollToBottomInstant() {
             const container = document.getElementById('messagesContainer');
-            setTimeout(() => {
+            requestAnimationFrame(() => {
                 container.scrollTop = container.scrollHeight;
-            }, 10);
+            });
         }
         
         // ============ Theme Management ============
@@ -1364,7 +2405,7 @@
             document.body.className = `h-screen overflow-hidden ${isDark ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`;
             
             // Sidebar
-            document.getElementById('sidebar').className = `w-80 flex flex-col border-r ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'}`;
+            document.getElementById('sidebar').className = `w-[340px] flex flex-col border-r ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'}`;
             
             // Logo section
             document.getElementById('logoSection').className = `p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
@@ -1374,35 +2415,103 @@
             // Model section
             document.getElementById('modelSection').className = `p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
             document.getElementById('modelLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
-            document.getElementById('modelSelector').className = `w-full py-2.5 px-4 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            document.getElementById('modelSelector').className = `w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            document.getElementById('modelDropdownIcon').className = `fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none z-10 ${isDark ? 'text-gray-400' : 'text-gray-400'}`;
             document.getElementById('availableModelsCount').className = `text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-600'}`;
             
-            // Recent chats
+            // Chat sessions section
+            document.getElementById('chatSessionsSection').className = `flex-1 overflow-y-auto scrollbar-thin p-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
             document.getElementById('recentChatsLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
-            document.getElementById('totalMessagesCount').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`;
+            document.getElementById('totalMessagesCount').className = `text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`;
             document.getElementById('newChatBtn').className = `w-full mb-3 py-2.5 px-4 rounded-xl border-2 border-dashed ${isDark ? 'border-gray-600 hover:border-purple-500 hover:bg-purple-900/30 text-gray-400 hover:text-purple-400' : 'border-gray-300 hover:border-purple-500 hover:bg-purple-50 text-gray-700 hover:text-purple-600'} transition-all duration-200 flex items-center justify-center gap-2 group`;
             
             // Main area
-            document.getElementById('mainArea').className = `flex-1 flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`;
-            document.getElementById('header').className = `h-16 border-b flex items-center justify-between px-6 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
+            document.getElementById('mainArea').className = `flex-1 flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'} relative`;
+            document.getElementById('header').className = `border-b flex items-center justify-between px-6 py-3 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
             document.getElementById('chatTitle').className = `font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`;
             document.getElementById('chatSubtitle').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
-            document.getElementById('messagesContainer').className = `flex-1 overflow-y-auto scrollbar-thin p-6 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`;
-            document.getElementById('inputArea').className = `p-4 border-t ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
+            document.getElementById('messagesContainer').className = `flex-1 overflow-y-auto scrollbar-thin p-6 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} relative`;
+            document.getElementById('inputArea').className = `p-4 border-t ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} relative`;
             document.getElementById('inputHint').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center mt-3`;
             document.getElementById('themeIcon').className = `fas ${isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'}`;
-            document.getElementById('messageInput').className = `w-full py-4 px-5 pr-28 rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40 ${isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}`;
+            document.getElementById('messageInput').className = `w-full py-4 px-5 pr-36 rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40 ${isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}`;
+            
+            // System prompt button
+            document.getElementById('systemPromptBtn').className = `w-10 h-10 rounded-xl ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'} flex items-center justify-center transition-colors`;
+            
+            // Scroll buttons with chip style
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            const scrollBottomBtn = document.getElementById('scrollBottomBtn');
+            scrollTopBtn.className = `scroll-nav-btn ${isDark ? 'bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'}`;
+            scrollBottomBtn.className = `scroll-nav-btn ${isDark ? 'bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'}`;
+            // Preserve display state
+            scrollTopBtn.style.display = scrollTopBtn.style.display;
+            scrollBottomBtn.style.display = scrollBottomBtn.style.display;
             
             // Settings button
             document.getElementById('settingsBtnSection').className = `p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
             document.getElementById('settingsBtn').className = `w-full py-2.5 px-4 rounded-xl ${isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-700'} transition-all duration-200 flex items-center gap-3`;
             
-            // Settings modal
-            document.getElementById('settingsContent').className = `relative w-full max-w-lg rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-900' : 'bg-white'}`;
+            
+            // Settings modal - sidebar style
+            document.getElementById('settingsContent').className = `absolute left-0 top-0 bottom-0 w-[340px] shadow-2xl p-5 overflow-y-auto scrollbar-thin pointer-events-auto ${isDark ? 'bg-gray-900' : 'bg-white'}`;
             document.getElementById('settingsTitle').className = `text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`;
             document.getElementById('apiUrl').className = `w-full py-2.5 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
             document.getElementById('systemPrompt').className = `w-full py-2.5 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
-            document.getElementById('settingsCurrentModel').className = `py-2.5 px-4 rounded-xl border ${isDark ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-300 bg-gray-50 text-gray-900'}`;
+            document.getElementById('multiModelContainer').className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+            document.getElementById('autostartContainer').className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+            
+            // Settings section headings - fix dark mode visibility
+            document.querySelectorAll('#settingsContent h4').forEach(h4 => {
+                h4.className = `font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`;
+            });
+            
+            // Collapsible section buttons
+            document.querySelectorAll('.settings-section-container > button').forEach(btn => {
+                btn.className = `w-full font-semibold flex items-center justify-between py-2 rounded-lg px-2 transition-colors ${isDark ? 'text-white hover:bg-gray-800' : 'text-gray-900 hover:bg-gray-50'}`;
+            });
+            
+            // Close button in settings - always red chip style
+            const closeBtn = document.querySelector('#settingsContent > div:first-child > button');
+            if (closeBtn) {
+                closeBtn.className = 'px-3 py-1.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors flex items-center gap-2';
+            }
+            
+            // Fonts heading inside Appearance
+            const fontsHeading = document.getElementById('fontsHeading');
+            if (fontsHeading) {
+                fontsHeading.className = `font-semibold text-sm mt-4 mb-2 flex items-center gap-2 ${isDark ? 'text-gray-200' : 'text-gray-700'}`;
+            }
+            
+            // Settings labels
+            document.getElementById('defaultModelLabel').className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1 block`;
+            document.getElementById('defaultModelHint').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-2`;
+            document.getElementById('systemPromptLabel').className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-1 block`;
+            document.getElementById('multiModelLabel').className = `${isDark ? 'text-gray-200' : 'text-gray-700'} text-sm font-medium`;
+            document.getElementById('autostartLabel').className = `${isDark ? 'text-gray-200' : 'text-gray-700'} text-sm font-medium`;
+            document.getElementById('multiModelDesc').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`;
+            document.getElementById('autostartDesc').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`;
+            
+            // Test Connection button - fix dark mode visibility
+            document.getElementById('testConnBtn').className = `py-2 px-4 rounded-xl border transition-colors text-sm flex items-center gap-2 ${isDark ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600' : 'border-gray-300 hover:bg-gray-100 text-gray-700'}`;
+            
+            // Dark Mode container label
+            const darkModeLabel = document.querySelector('#darkModeContainer > span');
+            if (darkModeLabel) {
+                darkModeLabel.className = isDark ? 'text-gray-200' : 'text-gray-700';
+            }
+            
+            // Data management buttons - fix Export button visibility in dark mode
+            const exportBtn = document.querySelector('#settingsContent button[onclick="exportChats()"]');
+            if (exportBtn) {
+                exportBtn.className = `flex-1 py-2 px-3 rounded-xl border transition-colors text-xs flex items-center justify-center gap-1.5 ${isDark ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600' : 'border-gray-300 hover:bg-gray-100 text-gray-700'}`;
+            }
+            
+            // Settings model selector
+            const settingsModelSelector = document.getElementById('settingsModelSelector');
+            if (settingsModelSelector) {
+                settingsModelSelector.className = `w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            }
             
             // Dark mode toggle
             const darkModeToggle = document.getElementById('darkModeToggle');
@@ -1410,6 +2519,32 @@
             darkModeToggle.className = `w-14 h-7 rounded-full relative transition-colors duration-300 ${isDark ? 'bg-purple-500' : 'bg-gray-300'}`;
             toggleKnob.style.left = isDark ? '1.75rem' : '0.25rem';
             document.getElementById('darkModeContainer').className = `flex items-center justify-between py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+            
+            // Fonts section - removed old fontsSectionTitle reference as it's now a button
+            
+            // Font containers
+            const interfaceFontContainer = document.getElementById('interfaceFontContainer');
+            const answerFontContainer = document.getElementById('answerFontContainer');
+            const codeFontContainer = document.getElementById('codeFontContainer');
+            
+            if (interfaceFontContainer) {
+                interfaceFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const interfaceFontLabel = document.getElementById('interfaceFontLabel');
+                if (interfaceFontLabel) interfaceFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
+            }
+            if (answerFontContainer) {
+                answerFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const answerFontLabel = document.getElementById('answerFontLabel');
+                if (answerFontLabel) answerFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
+            }
+            if (codeFontContainer) {
+                codeFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const codeFontLabel = document.getElementById('codeFontLabel');
+                if (codeFontLabel) codeFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
+            }
+            
+            // System prompt popup
+            applyThemeToSystemPromptPopup();
             
             // Re-render dynamic content
             renderChatSessions();
@@ -1424,14 +2559,64 @@
         // ============ Modal Controls ============
         function openSettings() {
             document.getElementById('settingsModal').classList.remove('hidden');
-            document.getElementById('settingsModal').classList.add('flex');
-            document.getElementById('settingsCurrentModel').textContent = config.currentModel || 'None selected';
             document.getElementById('connectionTestResult').textContent = '';
+            updateSettingsToggles();
+            
+            // Populate settings model selector
+            const settingsSelector = document.getElementById('settingsModelSelector');
+            if (availableModels.length > 0) {
+                settingsSelector.innerHTML = availableModels.map(m => `
+                    <option value="${m.name}" ${m.name === config.currentModel ? 'selected' : ''}>
+                        ${m.name}
+                    </option>
+                `).join('');
+            } else {
+                settingsSelector.innerHTML = '<option value="">No models available</option>';
+            }
+            
+            // Apply theme to settings modal
+            const isDark = config.theme === 'dark';
+            settingsSelector.className = `w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            
+            // Populate font selectors
+            populateFontSelectors();
+        }
+        
+        function setDefaultModel(modelName) {
+            if (!modelName) return;
+            config.currentModel = modelName;
+            saveConfig();
+            // Update main model selector too
+            document.getElementById('modelSelector').value = modelName;
+            updateModelDisplay();
+            showToast(`Default model set to ${modelName}`, 'info');
         }
         
         function closeSettings() {
             document.getElementById('settingsModal').classList.add('hidden');
-            document.getElementById('settingsModal').classList.remove('flex');
+        }
+        
+        function toggleSettingsSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const icon = document.getElementById(sectionId + 'Icon');
+            
+            if (section.classList.contains('collapsed')) {
+                // Expanding - show up arrow (rotate icon 180deg)
+                section.classList.remove('collapsed');
+                // Calculate proper max-height for animation
+                section.style.maxHeight = 'none';
+                const height = section.scrollHeight;
+                section.style.maxHeight = '0px';
+                // Trigger reflow
+                section.offsetHeight;
+                section.style.maxHeight = height + 'px';
+                icon.classList.add('rotated');
+            } else {
+                // Collapsing - show down arrow (no rotation)
+                section.style.maxHeight = '0px';
+                section.classList.add('collapsed');
+                icon.classList.remove('rotated');
+            }
         }
         
         // ============ Data Management ============
@@ -1453,12 +2638,36 @@
             showToast('Chats exported!', 'success');
         }
         
-        function clearAllData() {
-            if (confirm('Delete all data? This cannot be undone.')) {
-                localStorage.removeItem(CONFIG_KEY);
-                localStorage.removeItem(CHATS_KEY);
-                location.reload();
-            }
+        function clearAllChats() {
+            localStorage.removeItem(CHATS_KEY);
+            chatSessions = [];
+            createNewChat();
+            showToast('All chats cleared!', 'success');
+        }
+        
+        function clearAllConfigs() {
+            localStorage.removeItem(CONFIG_KEY);
+            config = {
+                apiUrl: 'http://127.0.0.1:11434',
+                currentModel: '',
+                systemPrompt: '',
+                theme: 'light',
+                allowMultipleModels: false,
+                autostartModels: false,
+                interfaceFont: 'Inter',
+                interfaceFontSize: 14,
+                answerFont: 'Inter',
+                answerFontSize: 14,
+                codeFont: 'JetBrains Mono',
+                codeFontSize: 13
+            };
+            saveConfig();
+            loadConfig();
+            applyTheme();
+            applyFonts();
+            updateSettingsToggles();
+            checkOllamaStatus();
+            showToast('All configs reset to default!', 'success');
         }
         
         // ============ Utility Functions ============
@@ -1482,10 +2691,6 @@
             sidebar.classList.toggle('h-full');
         }
         
-        function updateTempDisplay(value) {
-            document.getElementById('tempDisplay').textContent = value;
-        }
-        
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -1505,8 +2710,33 @@
             return date.toLocaleDateString();
         }
         
-        function formatTime(dateStr) {
-            return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // 12-hour time format
+        function formatTime12hr(date) {
+            if (!(date instanceof Date) || isNaN(date)) {
+                return 'N/A';
+            }
+            return date.toLocaleTimeString([], { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        }
+        
+        // Format duration in human readable format
+        function formatDuration(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            if (hours > 0) {
+                const remainingMins = minutes % 60;
+                return `in ${hours}hr ${remainingMins}min`;
+            } else if (minutes > 0) {
+                const remainingSecs = seconds % 60;
+                return `in ${minutes}min ${remainingSecs}sec`;
+            } else {
+                return `in ${seconds}sec`;
+            }
         }
         
         function formatBytes(bytes) {
