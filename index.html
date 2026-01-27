@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Chat - Local AI Assistant</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        .message-enter {
+            animation: messageSlide 0.3s ease-out;
+        }
+        
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes pulse-dot {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .typing-dot {
+            animation: pulse-dot 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        .typing-dot:nth-child(3) { animation-delay: 0s; }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        pre {
+            position: relative;
+        }
+        
+        pre code {
+            display: block;
+            overflow-x: auto;
+            padding: 1rem;
+            padding-top: 2rem;
+            border-radius: 0.5rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 0.25rem;
+            right: 0.25rem;
+            padding: 0.2rem 0.35rem;
+            border-radius: 0.2rem;
+            font-size: 0.55rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+            line-height: 1;
+        }
+        
+        .copy-btn i {
+            font-size: 0.55rem;
+        }
+        
+        .model-name-tooltip {
+            position: relative;
+        }
+        
+        .model-name-tooltip:hover::after {
+            content: attr(data-fullname);
+            position: absolute;
+            left: 0;
+            top: 100%;
+            background: #1f2937;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.65rem;
+            white-space: nowrap;
+            z-index: 100;
+            margin-top: 0.25rem;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .toast-enter {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .animate-spin-slow {
+            animation: spin 2s linear infinite;
+        }
+        
+        .stat-label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            opacity: 0.8;
+        }
+        
+        .stat-value {
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        .model-card {
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden bg-white text-gray-900">
+    <div id="app" class="flex h-full">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-80 flex flex-col border-r border-gray-200 bg-gray-50">
+            <!-- Logo -->
+            <div id="logoSection" class="p-4 border-b border-gray-200">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center shadow-lg">
+                        <i class="fas fa-robot text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 id="appTitle" class="font-bold text-lg text-gray-900">Ollama Chat</h1>
+                        <p id="appSubtitle" class="text-xs text-gray-500">Local AI Assistant</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Model Selector -->
+            <div id="modelSection" class="p-4 border-b border-gray-200">
+                <div class="flex items-center justify-between mb-2">
+                    <label id="modelLabel" class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Model</label>
+                    <span id="availableModelsCount" class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">0</span>
+                </div>
+                <div class="relative">
+                    <select id="modelSelector" onchange="changeModel(this.value)" class="w-full py-2.5 px-4 rounded-xl appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm">
+                        <option value="">Loading models...</option>
+                    </select>
+                    <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none"></i>
+                </div>
+                
+                <!-- Load Model Button -->
+                <button id="loadModelBtn" onclick="loadModel()" class="hidden w-full mt-3 py-2 px-4 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-play"></i>
+                    <span>Start Model</span>
+                </button>
+                
+                <!-- Running Models Section -->
+                <div id="runningModelsSection" class="mt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Running Models</p>
+                        <span id="runningModelsCount" class="text-xs text-gray-400">0</span>
+                    </div>
+                    <div id="runningModelsList" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+                        <p class="text-xs text-gray-400 text-center py-2">No models running</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Sessions -->
+            <div class="flex-1 overflow-y-auto scrollbar-thin p-3">
+                <div class="flex items-center justify-between mb-2 px-2">
+                    <p id="recentChatsLabel" class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent Chats</p>
+                    <span id="totalMessagesCount" class="text-xs text-gray-400">0 messages</span>
+                </div>
+                
+                <!-- New Chat Button -->
+                <button id="newChatBtn" onclick="createNewChat()" class="w-full mb-3 py-2.5 px-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 flex items-center justify-center gap-2 group text-gray-700 hover:text-purple-600">
+                    <i class="fas fa-plus group-hover:rotate-90 transition-transform duration-200"></i>
+                    <span class="font-medium">New Chat</span>
+                </button>
+                
+                <div id="chatSessions" class="space-y-1">
+                    <!-- Chat sessions will be populated here -->
+                </div>
+            </div>
+            
+            <!-- Settings Button -->
+            <div id="settingsBtnSection" class="p-4 border-t border-gray-200">
+                <button onclick="openSettings()" id="settingsBtn" class="w-full py-2.5 px-4 rounded-xl hover:bg-gray-200 transition-all duration-200 flex items-center gap-3 text-gray-700">
+                    <i class="fas fa-cog"></i>
+                    <span class="font-medium">Settings</span>
+                </button>
+            </div>
+        </aside>
+        
+        <!-- Main Chat Area -->
+        <main id="mainArea" class="flex-1 flex flex-col bg-white">
+            <!-- Header -->
+            <header id="header" class="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors lg:hidden">
+                        <i class="fas fa-bars text-gray-600"></i>
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <h2 id="chatTitle" class="font-semibold text-gray-900">New Chat</h2>
+                        <button onclick="renameCurrentChat()" id="renameChatBtn" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Rename chat">
+                            <i class="fas fa-pen text-gray-400 hover:text-gray-600 text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <p id="chatSubtitle" class="text-xs text-gray-500 mr-2">Start a conversation</p>
+                    <button onclick="toggleTheme()" class="p-2.5 rounded-xl hover:bg-gray-100 transition-colors" title="Toggle theme">
+                        <i id="themeIcon" class="fas fa-moon text-gray-600"></i>
+                    </button>
+                    <button onclick="clearCurrentChat()" class="p-2.5 rounded-xl hover:bg-gray-100 transition-colors" title="Clear chat">
+                        <i class="fas fa-trash-alt text-gray-600"></i>
+                    </button>
+                </div>
+            </header>
+            
+            <!-- Messages Container -->
+            <div id="messagesContainer" class="flex-1 overflow-y-auto scrollbar-thin p-6 bg-gray-50">
+                <div id="messages" class="max-w-4xl mx-auto space-y-6">
+                    <!-- Welcome Message -->
+                    <div id="welcomeScreen" class="flex flex-col items-center justify-center text-center py-20">
+                        <div class="w-20 h-20 rounded-2xl gradient-bg flex items-center justify-center mb-6 shadow-lg shadow-purple-500/30">
+                            <i class="fas fa-robot text-white text-3xl"></i>
+                        </div>
+                        <h2 id="welcomeTitle" class="text-2xl font-bold mb-2 text-gray-900">Welcome to Ollama Chat</h2>
+                        <p id="welcomeSubtitle" class="text-gray-500 mb-8 max-w-md">Your local AI assistant powered by Ollama. Start a conversation by typing a message below.</p>
+                        <div id="quickMessages" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
+                            <button onclick="sendQuickMessage('Explain quantum computing in simple terms')" class="quick-msg-btn p-4 rounded-xl border border-gray-200 bg-white hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                                <i class="fas fa-lightbulb text-purple-500 mb-2"></i>
+                                <p class="text-sm font-medium text-gray-900">Explain quantum computing</p>
+                                <p class="text-xs text-gray-500">in simple terms</p>
+                            </button>
+                            <button onclick="sendQuickMessage('Write a Python function to sort a list')" class="quick-msg-btn p-4 rounded-xl border border-gray-200 bg-white hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                                <i class="fas fa-code text-purple-500 mb-2"></i>
+                                <p class="text-sm font-medium text-gray-900">Write Python code</p>
+                                <p class="text-xs text-gray-500">to sort a list</p>
+                            </button>
+                            <button onclick="sendQuickMessage('What are the best practices for REST API design?')" class="quick-msg-btn p-4 rounded-xl border border-gray-200 bg-white hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                                <i class="fas fa-server text-purple-500 mb-2"></i>
+                                <p class="text-sm font-medium text-gray-900">REST API best practices</p>
+                                <p class="text-xs text-gray-500">design guidelines</p>
+                            </button>
+                            <button onclick="sendQuickMessage('Help me brainstorm ideas for a mobile app')" class="quick-msg-btn p-4 rounded-xl border border-gray-200 bg-white hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                                <i class="fas fa-mobile-alt text-purple-500 mb-2"></i>
+                                <p class="text-sm font-medium text-gray-900">Brainstorm app ideas</p>
+                                <p class="text-xs text-gray-500">for mobile development</p>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Input Area -->
+            <div id="inputArea" class="p-4 border-t border-gray-200 bg-white">
+                <div class="max-w-4xl mx-auto">
+                    <div class="relative flex items-end gap-3">
+                        <div class="flex-1 relative">
+                            <textarea 
+                                id="messageInput" 
+                                placeholder="Type your message..." 
+                                rows="1"
+                                class="w-full py-4 px-5 pr-14 rounded-2xl border border-gray-300 bg-white text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40"
+                                onkeydown="handleKeyDown(event)"
+                                oninput="autoResize(this)"
+                            ></textarea>
+                            <button 
+                                id="sendBtn"
+                                onclick="sendMessage()" 
+                                class="absolute right-3 bottom-3 w-10 h-10 rounded-xl gradient-bg text-white flex items-center justify-center hover:opacity-90 transition-opacity shadow-lg"
+                            >
+                                <i id="sendIcon" class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="inputHint" class="text-xs text-gray-400 text-center mt-3">
+                        <span id="currentModelDisplay" class="font-medium text-purple-600">No model loaded</span> • Press Enter to send, Shift+Enter for new line
+                    </p>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeSettings()"></div>
+        <div id="settingsContent" class="relative w-full max-w-lg rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto bg-white">
+            <div class="flex items-center justify-between mb-6">
+                <h3 id="settingsTitle" class="text-xl font-bold text-gray-900">Settings</h3>
+                <button onclick="closeSettings()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fas fa-times text-gray-600"></i>
+                </button>
+            </div>
+            
+            <!-- Connection Settings -->
+            <div class="mb-6">
+                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                    <i class="fas fa-plug text-purple-500"></i>
+                    Connection
+                </h4>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm text-gray-500 mb-1 block">Ollama API URL</label>
+                        <input type="text" id="apiUrl" value="http://127.0.0.1:11434" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="testConnection()" id="testConnBtn" class="py-2 px-4 rounded-xl border border-gray-300 hover:bg-gray-100 transition-colors text-sm flex items-center gap-2 text-gray-700">
+                            <i class="fas fa-sync-alt"></i>
+                            Test Connection
+                        </button>
+                        <span id="connectionTestResult" class="text-sm font-medium"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Model Settings -->
+            <div class="mb-6">
+                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                    <i class="fas fa-brain text-purple-500"></i>
+                    Model Configuration
+                </h4>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm text-gray-500 mb-1 block">Current Model</label>
+                        <p id="settingsCurrentModel" class="py-2.5 px-4 rounded-xl border border-gray-300 bg-gray-50 text-gray-900">None selected</p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500 mb-1 block">Temperature (0-1)</label>
+                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7" class="w-full accent-purple-500" oninput="updateTempDisplay(this.value)">
+                        <p class="text-sm text-gray-500">Current: <span id="tempDisplay" class="font-medium text-purple-600">0.7</span></p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500 mb-1 block">System Prompt (optional)</label>
+                        <textarea id="systemPrompt" rows="3" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" placeholder="You are a helpful assistant..."></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Appearance -->
+            <div class="mb-6">
+                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                    <i class="fas fa-palette text-purple-500"></i>
+                    Appearance
+                </h4>
+                <div id="darkModeContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
+                    <span class="text-gray-700">Dark Mode</span>
+                    <button id="darkModeToggle" onclick="toggleTheme()" class="w-14 h-7 rounded-full bg-gray-300 relative transition-colors duration-300">
+                        <span id="toggleKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-all duration-300 shadow-md"></span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Data Management -->
+            <div class="mb-6">
+                <h4 class="font-semibold mb-3 flex items-center gap-2 text-gray-900">
+                    <i class="fas fa-database text-purple-500"></i>
+                    Data Management
+                </h4>
+                <div class="space-y-2">
+                    <button onclick="exportChats()" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 hover:bg-gray-100 transition-colors text-sm flex items-center gap-2 text-gray-700">
+                        <i class="fas fa-download"></i>
+                        Export All Chats
+                    </button>
+                    <button onclick="clearAllData()" class="w-full py-2.5 px-4 rounded-xl border border-red-300 text-red-500 hover:bg-red-50 transition-colors text-sm flex items-center gap-2">
+                        <i class="fas fa-trash-alt"></i>
+                        Clear All Data
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Save Button -->
+            <button onclick="saveSettings()" class="w-full py-3 rounded-xl gradient-bg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg">
+                Save Settings
+            </button>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <script>
+        // ============ Configuration & State ============
+        const CONFIG_KEY = 'ollama_chat_config';
+        const CHATS_KEY = 'ollama_chat_sessions';
+        
+        let config = {
+            apiUrl: 'http://127.0.0.1:11434',
+            currentModel: '',
+            temperature: 0.7,
+            systemPrompt: '',
+            theme: 'light'
+        };
+        
+        let chatSessions = [];
+        let currentChatId = null;
+        let isGenerating = false;
+        let modelReady = false;
+        let availableModels = [];
+        let runningModels = [];
+        let statusCheckInterval = null;
+        
+        // ============ Initialization ============
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+            loadChatSessions();
+            applyTheme();
+            initializeApp();
+        });
+        
+        async function initializeApp() {
+            await checkOllamaStatus();
+            renderChatSessions();
+            updateTotalMessagesCount();
+            
+            if (chatSessions.length === 0) {
+                createNewChat();
+            } else {
+                loadChat(chatSessions[0].id);
+            }
+            
+            // Start periodic status check every 2 seconds
+            statusCheckInterval = setInterval(checkRunningModels, 2000);
+        }
+        
+        // ============ Config Management ============
+        function loadConfig() {
+            const saved = localStorage.getItem(CONFIG_KEY);
+            if (saved) {
+                config = { ...config, ...JSON.parse(saved) };
+            }
+            
+            document.getElementById('apiUrl').value = config.apiUrl;
+            document.getElementById('temperature').value = config.temperature;
+            document.getElementById('systemPrompt').value = config.systemPrompt || '';
+            updateTempDisplay(config.temperature);
+        }
+        
+        function saveConfig() {
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+        }
+        
+        function saveSettings() {
+            config.apiUrl = document.getElementById('apiUrl').value;
+            config.temperature = parseFloat(document.getElementById('temperature').value);
+            config.systemPrompt = document.getElementById('systemPrompt').value;
+            saveConfig();
+            closeSettings();
+            checkOllamaStatus();
+            showToast('Settings saved successfully!', 'success');
+        }
+        
+        // ============ Chat Sessions Management ============
+        function loadChatSessions() {
+            const saved = localStorage.getItem(CHATS_KEY);
+            if (saved) {
+                chatSessions = JSON.parse(saved);
+            }
+        }
+        
+        function saveChatSessions() {
+            localStorage.setItem(CHATS_KEY, JSON.stringify(chatSessions));
+        }
+        
+        function createNewChat() {
+            const newChat = {
+                id: 'chat_' + Date.now().toString(),
+                title: 'New Chat',
+                messages: [],
+                model: config.currentModel,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            chatSessions.unshift(newChat);
+            saveChatSessions();
+            currentChatId = newChat.id;
+            
+            document.getElementById('chatTitle').textContent = 'New Chat';
+            document.getElementById('chatSubtitle').textContent = 'Start a conversation';
+            
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            messagesDiv.appendChild(createWelcomeScreen());
+            
+            renderChatSessions();
+            updateTotalMessagesCount();
+            showToast('New chat created', 'success');
+        }
+        
+        function createWelcomeScreen() {
+            const isDark = config.theme === 'dark';
+            const div = document.createElement('div');
+            div.id = 'welcomeScreen';
+            div.className = 'flex flex-col items-center justify-center text-center py-20';
+            div.innerHTML = `
+                <div class="w-20 h-20 rounded-2xl gradient-bg flex items-center justify-center mb-6 shadow-lg shadow-purple-500/30">
+                    <i class="fas fa-robot text-white text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}">Welcome to Ollama Chat</h2>
+                <p class="${isDark ? 'text-gray-400' : 'text-gray-500'} mb-8 max-w-md">Your local AI assistant powered by Ollama. Start a conversation by typing a message below.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
+                    <button onclick="sendQuickMessage('Explain quantum computing in simple terms')" class="p-4 rounded-xl border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                        <i class="fas fa-lightbulb text-purple-500 mb-2"></i>
+                        <p class="text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}">Explain quantum computing</p>
+                        <p class="text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}">in simple terms</p>
+                    </button>
+                    <button onclick="sendQuickMessage('Write a Python function to sort a list')" class="p-4 rounded-xl border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                        <i class="fas fa-code text-purple-500 mb-2"></i>
+                        <p class="text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}">Write Python code</p>
+                        <p class="text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}">to sort a list</p>
+                    </button>
+                    <button onclick="sendQuickMessage('What are the best practices for REST API design?')" class="p-4 rounded-xl border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                        <i class="fas fa-server text-purple-500 mb-2"></i>
+                        <p class="text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}">REST API best practices</p>
+                        <p class="text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}">design guidelines</p>
+                    </button>
+                    <button onclick="sendQuickMessage('Help me brainstorm ideas for a mobile app')" class="p-4 rounded-xl border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} hover:border-purple-500 text-left transition-all hover:shadow-lg group">
+                        <i class="fas fa-mobile-alt text-purple-500 mb-2"></i>
+                        <p class="text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}">Brainstorm app ideas</p>
+                        <p class="text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}">for mobile development</p>
+                    </button>
+                </div>
+            `;
+            return div;
+        }
+        
+        function loadChat(chatId) {
+            currentChatId = chatId;
+            const chat = chatSessions.find(c => c.id === chatId);
+            
+            if (chat) {
+                document.getElementById('chatTitle').textContent = chat.title;
+                document.getElementById('chatSubtitle').textContent = 
+                    chat.messages.length > 0 ? `${chat.messages.length} messages` : 'Start a conversation';
+                
+                renderMessages(chat.messages);
+                renderChatSessions();
+            }
+        }
+        
+        function deleteChat(chatId, event) {
+            event.stopPropagation();
+            
+            chatSessions = chatSessions.filter(c => c.id !== chatId);
+            saveChatSessions();
+            
+            if (currentChatId === chatId) {
+                if (chatSessions.length > 0) {
+                    loadChat(chatSessions[0].id);
+                } else {
+                    createNewChat();
+                }
+            }
+            
+            renderChatSessions();
+            updateTotalMessagesCount();
+            showToast('Chat deleted', 'success');
+        }
+        
+        function clearCurrentChat() {
+            if (!currentChatId) return;
+            
+            const chat = chatSessions.find(c => c.id === currentChatId);
+            if (chat) {
+                chat.messages = [];
+                chat.title = 'New Chat';
+                chat.updatedAt = new Date().toISOString();
+                saveChatSessions();
+                loadChat(currentChatId);
+                updateTotalMessagesCount();
+                showToast('Chat cleared', 'success');
+            }
+        }
+        
+        function updateTotalMessagesCount() {
+            let total = 0;
+            chatSessions.forEach(chat => {
+                total += chat.messages.length;
+            });
+            document.getElementById('totalMessagesCount').textContent = `${total} messages`;
+        }
+        
+        function renderChatSessions() {
+            const container = document.getElementById('chatSessions');
+            const isDark = config.theme === 'dark';
+            
+            if (chatSessions.length === 0) {
+                container.innerHTML = `
+                    <p class="text-sm text-center py-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}">No chats yet</p>
+                `;
+                return;
+            }
+            
+            container.innerHTML = chatSessions.map(chat => {
+                const isActive = chat.id === currentChatId;
+                return `
+                    <div 
+                        onclick="loadChat('${chat.id}')"
+                        class="group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                            isActive 
+                                ? (isDark ? 'bg-purple-900/40 border border-purple-600' : 'bg-purple-100 border border-purple-300')
+                                : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
+                        }"
+                    >
+                        <div class="w-9 h-9 rounded-lg ${isActive ? 'bg-purple-500' : (isDark ? 'bg-gray-700' : 'bg-gray-200')} flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-comment-dots ${isActive ? 'text-white' : (isDark ? 'text-gray-400' : 'text-gray-500')} text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-900'}">${escapeHtml(chat.title)}</p>
+                            <p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}">${formatDate(chat.updatedAt)} • ${chat.messages.length} msg</p>
+                        </div>
+                        <button 
+                            onclick="deleteChat('${chat.id}', event)"
+                            class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg ${isDark ? 'hover:bg-red-900/50' : 'hover:bg-red-100'} transition-all"
+                        >
+                            <i class="fas fa-trash text-xs text-red-500"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // ============ Ollama API Integration ============
+        async function checkOllamaStatus() {
+            try {
+                const response = await fetch(`${config.apiUrl}/api/tags`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                availableModels = data.models || [];
+                
+                // Update available models count
+                const countChip = document.getElementById('availableModelsCount');
+                countChip.textContent = availableModels.length.toString();
+                
+                if (availableModels.length === 0) {
+                    document.getElementById('modelSelector').innerHTML = '<option value="">No models found</option>';
+                    document.getElementById('loadModelBtn').classList.add('hidden');
+                    return false;
+                }
+                
+                // Populate model selector
+                const selector = document.getElementById('modelSelector');
+                selector.innerHTML = availableModels.map(m => `
+                    <option value="${m.name}" ${m.name === config.currentModel ? 'selected' : ''}>
+                        ${m.name}
+                    </option>
+                `).join('');
+                
+                if (!config.currentModel || !availableModels.find(m => m.name === config.currentModel)) {
+                    config.currentModel = availableModels[0].name;
+                    saveConfig();
+                }
+                
+                selector.value = config.currentModel;
+                
+                // Check running models
+                await checkRunningModels();
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                document.getElementById('modelSelector').innerHTML = '<option value="">Connection failed</option>';
+                document.getElementById('loadModelBtn').classList.add('hidden');
+                document.getElementById('runningModelsList').innerHTML = '<p class="text-xs text-red-400 text-center py-2">Ollama not running</p>';
+                modelReady = false;
+                updateSendButton();
+                return false;
+            }
+        }
+        
+        async function checkRunningModels() {
+            try {
+                const response = await fetch(`${config.apiUrl}/api/ps`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) throw new Error('Failed to get running models');
+                
+                const data = await response.json();
+                runningModels = data.models || [];
+                
+                renderRunningModels();
+                
+                // Check if selected model is running
+                const selectedRunning = runningModels.find(m => 
+                    m.name === config.currentModel || m.model === config.currentModel
+                );
+                
+                const loadBtn = document.getElementById('loadModelBtn');
+                
+                if (selectedRunning) {
+                    modelReady = true;
+                    loadBtn.classList.add('hidden');
+                } else {
+                    modelReady = false;
+                    loadBtn.classList.remove('hidden');
+                    loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+                }
+                
+                updateSendButton();
+                updateModelDisplay();
+                
+            } catch (error) {
+                console.error('Error checking running models:', error);
+            }
+        }
+        
+        function renderRunningModels() {
+            const container = document.getElementById('runningModelsList');
+            const countEl = document.getElementById('runningModelsCount');
+            const isDark = config.theme === 'dark';
+            
+            countEl.textContent = runningModels.length.toString();
+            
+            if (runningModels.length === 0) {
+                container.innerHTML = `<p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center py-2">No models running</p>`;
+                return;
+            }
+            
+            container.innerHTML = runningModels.map(model => {
+                const modelName = model.name || model.model || 'Unknown';
+                const isSelected = modelName === config.currentModel;
+                const shortName = modelName.length > 18 ? modelName.substring(0, 18) + '...' : modelName;
+                
+                // Get actual values from ollama ps response
+                const size = model.size || 0;
+                const sizeVram = model.size_vram || 0;
+                
+                // Calculate GPU/CPU percentages based on VRAM vs total size
+                const gpuPercent = size > 0 ? Math.round((sizeVram / size) * 100) : 0;
+                const cpuPercent = 100 - gpuPercent;
+                
+                // Get details
+                const parameterSize = model.details?.parameter_size || 'N/A';
+                const quantization = model.details?.quantization_level || '';
+                
+                // Calculate times from expires_at
+                const expiresAt = model.expires_at ? new Date(model.expires_at) : null;
+                const now = new Date();
+                
+                // Estimate started time (expires_at - 5 minutes default keep_alive)
+                let startedTime = 'N/A';
+                let untilTime = 'N/A';
+                
+                if (expiresAt) {
+                    // Calculate remaining time
+                    const diffMs = expiresAt - now;
+                    if (diffMs > 0) {
+                        const mins = Math.floor(diffMs / 60000);
+                        const secs = Math.floor((diffMs % 60000) / 1000);
+                        untilTime = `${mins}m ${secs}s`;
+                    } else {
+                        untilTime = 'Expiring...';
+                    }
+                    
+                    // Estimate start time (5 min before expiry by default)
+                    const startedDate = new Date(expiresAt.getTime() - (5 * 60 * 1000));
+                    startedTime = startedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+                
+                return `
+                    <div class="model-card ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} ${isSelected ? 'ring-2 ring-purple-500' : ''}">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
+                                <span class="model-name-tooltip text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'} truncate" data-fullname="${modelName}" title="${modelName}">${shortName}</span>
+                            </div>
+                            <div class="flex items-center gap-1 flex-shrink-0">
+                                ${isSelected ? '<span class="text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded">Active</span>' : `<button onclick="selectRunningModel('${modelName}')" class="p-1 rounded hover:bg-purple-100 ${isDark ? 'hover:bg-purple-900/30' : ''} transition-colors" title="Use this model"><i class="fas fa-check-circle text-purple-500 text-xs"></i></button>`}
+                                <button onclick="stopModel('${modelName}')" class="p-1 rounded hover:bg-red-100 ${isDark ? 'hover:bg-red-900/30' : ''} transition-colors" title="Stop model">
+                                    <i class="fas fa-stop text-red-500 text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1 text-center">
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Size</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${formatBytes(size)}</p>
+                            </div>
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">CPU</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${cpuPercent}%</p>
+                            </div>
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">GPU</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${gpuPercent}%</p>
+                            </div>
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Context</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${parameterSize}</p>
+                            </div>
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Started</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${startedTime}</p>
+                            </div>
+                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
+                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Until</p>
+                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${untilTime}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function stopModel(modelName) {
+            try {
+                showToast(`Stopping ${modelName}...`, 'info');
+                
+                // Use keep_alive: 0 to immediately unload the model
+                const response = await fetch(`${config.apiUrl}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: modelName,
+                        prompt: '',
+                        keep_alive: 0
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to stop model');
+                
+                showToast(`Model ${modelName} stopped`, 'success');
+                await checkRunningModels();
+                
+            } catch (error) {
+                console.error('Error stopping model:', error);
+                showToast('Failed to stop model', 'error');
+            }
+        }
+        
+        async function loadModel() {
+            if (!config.currentModel) {
+                showToast('Please select a model first', 'error');
+                return;
+            }
+            
+            const loadBtn = document.getElementById('loadModelBtn');
+            loadBtn.disabled = true;
+            loadBtn.innerHTML = '<i class="fas fa-spinner animate-spin"></i><span>Loading...</span>';
+            
+            showToast(`Loading ${config.currentModel}...`, 'info');
+            
+            try {
+                const response = await fetch(`${config.apiUrl}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: config.currentModel,
+                        prompt: '',
+                        stream: false
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to load model');
+                
+                showToast(`Model ${config.currentModel} loaded!`, 'success');
+                await checkRunningModels();
+                
+            } catch (error) {
+                console.error('Error loading model:', error);
+                showToast('Failed to load model', 'error');
+            }
+            
+            loadBtn.disabled = false;
+            loadBtn.innerHTML = '<i class="fas fa-play"></i><span>Start Model</span>';
+        }
+        
+        async function testConnection() {
+            const btn = document.getElementById('testConnBtn');
+            const resultEl = document.getElementById('connectionTestResult');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            resultEl.textContent = '';
+            
+            config.apiUrl = document.getElementById('apiUrl').value;
+            saveConfig();
+            
+            try {
+                const response = await fetch(`${config.apiUrl}/api/tags`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    resultEl.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>Connected!</span>';
+                    await checkOllamaStatus();
+                } else {
+                    resultEl.innerHTML = '<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>Failed!</span>';
+                }
+            } catch (error) {
+                resultEl.innerHTML = '<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>Failed - Ollama not running</span>';
+            }
+            
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Test Connection';
+        }
+        
+        function changeModel(modelName) {
+            if (!modelName) return;
+            config.currentModel = modelName;
+            saveConfig();
+            checkRunningModels();
+            showToast(`Selected ${modelName}`, 'info');
+        }
+        
+        function selectRunningModel(modelName) {
+            config.currentModel = modelName;
+            saveConfig();
+            document.getElementById('modelSelector').value = modelName;
+            checkRunningModels();
+            showToast(`Switched to ${modelName}`, 'success');
+        }
+        
+        function renameCurrentChat() {
+            if (!currentChatId) return;
+            
+            const chat = chatSessions.find(c => c.id === currentChatId);
+            if (!chat) return;
+            
+            const newTitle = prompt('Enter new chat name:', chat.title);
+            if (newTitle && newTitle.trim()) {
+                chat.title = newTitle.trim();
+                chat.updatedAt = new Date().toISOString();
+                saveChatSessions();
+                document.getElementById('chatTitle').textContent = chat.title;
+                renderChatSessions();
+                showToast('Chat renamed', 'success');
+            }
+        }
+        
+        function updateModelDisplay() {
+            const display = document.getElementById('currentModelDisplay');
+            const settingsModel = document.getElementById('settingsCurrentModel');
+            
+            if (modelReady) {
+                display.textContent = `✓ ${config.currentModel}`;
+                display.className = 'font-medium text-green-600';
+            } else if (config.currentModel) {
+                display.textContent = `${config.currentModel} (not loaded)`;
+                display.className = 'font-medium text-yellow-600';
+            } else {
+                display.textContent = 'No model selected';
+                display.className = 'font-medium text-red-500';
+            }
+            
+            settingsModel.textContent = config.currentModel || 'None selected';
+        }
+        
+        function updateSendButton() {
+            const btn = document.getElementById('sendBtn');
+            const input = document.getElementById('messageInput');
+            
+            if (!modelReady || isGenerating) {
+                btn.classList.add('opacity-50');
+                input.placeholder = modelReady ? 'Type your message...' : 'Load a model first to start chatting...';
+            } else {
+                btn.classList.remove('opacity-50');
+                input.placeholder = 'Type your message...';
+            }
+        }
+        
+        // ============ Message Handling ============
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            if (!modelReady) {
+                showToast('Please load a model first!', 'error');
+                return;
+            }
+            
+            if (isGenerating) {
+                showToast('Please wait for the current response', 'warning');
+                return;
+            }
+            
+            let chat = chatSessions.find(c => c.id === currentChatId);
+            if (!chat) {
+                createNewChat();
+                chat = chatSessions.find(c => c.id === currentChatId);
+            }
+            
+            // Hide welcome screen
+            const welcomeScreen = document.getElementById('welcomeScreen');
+            if (welcomeScreen) {
+                welcomeScreen.style.display = 'none';
+            }
+            
+            chat.messages.push({
+                role: 'user',
+                content: message,
+                timestamp: new Date().toISOString()
+            });
+            
+            if (chat.messages.length === 1) {
+                chat.title = message.substring(0, 40) + (message.length > 40 ? '...' : '');
+            }
+            
+            chat.updatedAt = new Date().toISOString();
+            saveChatSessions();
+            renderMessages(chat.messages);
+            renderChatSessions();
+            updateTotalMessagesCount();
+            
+            input.value = '';
+            input.style.height = 'auto';
+            
+            await generateResponse(chat);
+        }
+        
+        async function generateResponse(chat) {
+            isGenerating = true;
+            updateSendButton();
+            
+            const sendIcon = document.getElementById('sendIcon');
+            sendIcon.className = 'fas fa-spinner animate-spin';
+            
+            const assistantMsg = {
+                role: 'assistant',
+                content: '',
+                timestamp: new Date().toISOString()
+            };
+            chat.messages.push(assistantMsg);
+            renderMessages(chat.messages, true);
+            
+            try {
+                const messages = chat.messages.slice(0, -1).map(m => ({
+                    role: m.role,
+                    content: m.content
+                }));
+                
+                if (config.systemPrompt) {
+                    messages.unshift({
+                        role: 'system',
+                        content: config.systemPrompt
+                    });
+                }
+                
+                const response = await fetch(`${config.apiUrl}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: config.currentModel,
+                        messages: messages,
+                        stream: true,
+                        options: {
+                            temperature: config.temperature
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(line => line.trim());
+                    
+                    for (const line of lines) {
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.message?.content) {
+                                assistantMsg.content += data.message.content;
+                                updateLastMessage(assistantMsg.content);
+                            }
+                        } catch (e) {
+                            // Skip invalid JSON lines
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Generation error:', error);
+                assistantMsg.content = '❌ Error: Failed to generate response. Please check if the model is loaded and try again.';
+                updateLastMessage(assistantMsg.content);
+                showToast('Failed to generate response', 'error');
+            }
+            
+            chat.updatedAt = new Date().toISOString();
+            saveChatSessions();
+            updateTotalMessagesCount();
+            
+            isGenerating = false;
+            sendIcon.className = 'fas fa-paper-plane';
+            updateSendButton();
+            
+            document.getElementById('chatTitle').textContent = chat.title;
+            document.getElementById('chatSubtitle').textContent = `${chat.messages.length} messages`;
+        }
+        
+        function sendQuickMessage(message) {
+            if (!modelReady) {
+                showToast('Please load a model first!', 'error');
+                return;
+            }
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+        
+        // ============ UI Rendering ============
+        function renderMessages(messages, isStreaming = false) {
+            const container = document.getElementById('messages');
+            const isDark = config.theme === 'dark';
+            
+            if (messages.length === 0) {
+                container.innerHTML = '';
+                container.appendChild(createWelcomeScreen());
+                return;
+            }
+            
+            container.innerHTML = messages.map((msg, idx) => {
+                const isLast = idx === messages.length - 1;
+                const isAssistant = msg.role === 'assistant';
+                const showTyping = isStreaming && isLast && isAssistant && !msg.content;
+                
+                return `
+                    <div class="message-enter flex gap-4 ${isAssistant ? '' : 'flex-row-reverse'}">
+                        <div class="w-10 h-10 rounded-xl ${isAssistant ? 'gradient-bg' : (isDark ? 'bg-gray-700' : 'bg-gray-300')} flex items-center justify-center flex-shrink-0 shadow-md">
+                            <i class="fas ${isAssistant ? 'fa-robot text-white' : 'fa-user ' + (isDark ? 'text-gray-300' : 'text-gray-600')} text-sm"></i>
+                        </div>
+                        <div class="flex-1 max-w-[80%] ${isAssistant ? '' : 'flex flex-col items-end'}">
+                            <div class="rounded-2xl p-4 ${isAssistant ? (isDark ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900 border border-gray-200') : 'gradient-bg text-white'} shadow-sm" ${isLast && isAssistant ? 'id="lastMessage"' : ''}>
+                                ${showTyping ? `
+                                    <div class="flex items-center gap-1.5 py-1">
+                                        <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
+                                        <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
+                                        <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
+                                    </div>
+                                ` : formatMessage(msg.content)}
+                            </div>
+                            <p class="text-xs mt-1 px-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}">${formatTime(msg.timestamp)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            attachCopyListeners();
+            scrollToBottom();
+        }
+        
+        function updateLastMessage(content) {
+            const el = document.getElementById('lastMessage');
+            if (el) {
+                el.innerHTML = formatMessage(content);
+                attachCopyListeners();
+                scrollToBottom();
+            }
+        }
+        
+        function attachCopyListeners() {
+            setTimeout(() => {
+                document.querySelectorAll('.copy-btn').forEach(btn => {
+                    if (!btn.hasAttribute('data-listener')) {
+                        btn.setAttribute('data-listener', 'true');
+                        btn.addEventListener('click', function() {
+                            const codeBlock = this.closest('pre').querySelector('code');
+                            const code = codeBlock.textContent;
+                            navigator.clipboard.writeText(code).then(() => {
+                                const originalHtml = this.innerHTML;
+                                this.innerHTML = '<i class="fas fa-check" style="font-size: 0.5rem;"></i>';
+                                this.title = 'Copied!';
+                                setTimeout(() => {
+                                    this.innerHTML = originalHtml;
+                                    this.title = 'Copy code';
+                                }, 1500);
+                            });
+                        });
+                    }
+                });
+            }, 50);
+        }
+        
+        function formatMessage(content) {
+            if (!content) return '';
+            
+            let formatted = escapeHtml(content);
+            const isDark = config.theme === 'dark';
+            
+            // Code blocks with tiny copy button
+            formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                const langLabel = lang || 'code';
+                return `<pre class="${isDark ? 'bg-gray-900' : 'bg-gray-100'} rounded-lg my-2 overflow-x-auto relative">
+                    <button class="copy-btn ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}" title="Copy code">
+                        <i class="fas fa-copy" style="font-size: 0.5rem;"></i>
+                    </button>
+                    <code class="language-${langLabel}">${code.trim()}</code>
+                </pre>`;
+            });
+            
+            // Inline code
+            formatted = formatted.replace(/`([^`]+)`/g, `<code class="px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-700' : 'bg-gray-200'} text-sm font-mono">$1</code>`);
+            
+            // Bold
+            formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            
+            // Italic
+            formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            
+            // Line breaks
+            formatted = formatted.replace(/\n/g, '<br>');
+            
+            return formatted;
+        }
+        
+        function scrollToBottom() {
+            const container = document.getElementById('messagesContainer');
+            setTimeout(() => {
+                container.scrollTop = container.scrollHeight;
+            }, 10);
+        }
+        
+        // ============ Theme Management ============
+        function toggleTheme() {
+            config.theme = config.theme === 'dark' ? 'light' : 'dark';
+            saveConfig();
+            applyTheme();
+        }
+        
+        function applyTheme() {
+            const isDark = config.theme === 'dark';
+            
+            // Body
+            document.body.className = `h-screen overflow-hidden ${isDark ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`;
+            
+            // Sidebar
+            document.getElementById('sidebar').className = `w-80 flex flex-col border-r ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'}`;
+            
+            // Logo section
+            document.getElementById('logoSection').className = `p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
+            document.getElementById('appTitle').className = `font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`;
+            document.getElementById('appSubtitle').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+            
+            // Model section
+            document.getElementById('modelSection').className = `p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
+            document.getElementById('modelLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
+            document.getElementById('modelSelector').className = `w-full py-2.5 px-4 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            document.getElementById('availableModelsCount').className = `text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-600'}`;
+            
+            // Recent chats
+            document.getElementById('recentChatsLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
+            document.getElementById('totalMessagesCount').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`;
+            document.getElementById('newChatBtn').className = `w-full mb-3 py-2.5 px-4 rounded-xl border-2 border-dashed ${isDark ? 'border-gray-600 hover:border-purple-500 hover:bg-purple-900/30 text-gray-400 hover:text-purple-400' : 'border-gray-300 hover:border-purple-500 hover:bg-purple-50 text-gray-700 hover:text-purple-600'} transition-all duration-200 flex items-center justify-center gap-2 group`;
+            
+            // Main area
+            document.getElementById('mainArea').className = `flex-1 flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'}`;
+            document.getElementById('header').className = `h-16 border-b flex items-center justify-between px-6 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
+            document.getElementById('chatTitle').className = `font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`;
+            document.getElementById('chatSubtitle').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+            document.getElementById('messagesContainer').className = `flex-1 overflow-y-auto scrollbar-thin p-6 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`;
+            document.getElementById('inputArea').className = `p-4 border-t ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
+            document.getElementById('inputHint').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center mt-3`;
+            document.getElementById('themeIcon').className = `fas ${isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'}`;
+            document.getElementById('messageInput').className = `w-full py-4 px-5 pr-14 rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40 ${isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}`;
+            
+            // Settings button
+            document.getElementById('settingsBtnSection').className = `p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
+            document.getElementById('settingsBtn').className = `w-full py-2.5 px-4 rounded-xl ${isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-700'} transition-all duration-200 flex items-center gap-3`;
+            
+            // Settings modal
+            document.getElementById('settingsContent').className = `relative w-full max-w-lg rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-900' : 'bg-white'}`;
+            document.getElementById('settingsTitle').className = `text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`;
+            document.getElementById('apiUrl').className = `w-full py-2.5 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            document.getElementById('systemPrompt').className = `w-full py-2.5 px-4 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            document.getElementById('settingsCurrentModel').className = `py-2.5 px-4 rounded-xl border ${isDark ? 'border-gray-600 bg-gray-800 text-white' : 'border-gray-300 bg-gray-50 text-gray-900'}`;
+            
+            // Dark mode toggle
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const toggleKnob = document.getElementById('toggleKnob');
+            darkModeToggle.className = `w-14 h-7 rounded-full relative transition-colors duration-300 ${isDark ? 'bg-purple-500' : 'bg-gray-300'}`;
+            toggleKnob.style.left = isDark ? '1.75rem' : '0.25rem';
+            document.getElementById('darkModeContainer').className = `flex items-center justify-between py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+            
+            // Re-render dynamic content
+            renderChatSessions();
+            renderRunningModels();
+            
+            if (currentChatId) {
+                const chat = chatSessions.find(c => c.id === currentChatId);
+                if (chat) renderMessages(chat.messages);
+            }
+        }
+        
+        // ============ Modal Controls ============
+        function openSettings() {
+            document.getElementById('settingsModal').classList.remove('hidden');
+            document.getElementById('settingsModal').classList.add('flex');
+            document.getElementById('settingsCurrentModel').textContent = config.currentModel || 'None selected';
+            document.getElementById('connectionTestResult').textContent = '';
+        }
+        
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+            document.getElementById('settingsModal').classList.remove('flex');
+        }
+        
+        // ============ Data Management ============
+        function exportChats() {
+            const data = {
+                config: config,
+                chatSessions: chatSessions,
+                exportedAt: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ollama-chat-export-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('Chats exported!', 'success');
+        }
+        
+        function clearAllData() {
+            if (confirm('Delete all data? This cannot be undone.')) {
+                localStorage.removeItem(CONFIG_KEY);
+                localStorage.removeItem(CHATS_KEY);
+                location.reload();
+            }
+        }
+        
+        // ============ Utility Functions ============
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
+        }
+        
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('-translate-x-full');
+            sidebar.classList.toggle('absolute');
+            sidebar.classList.toggle('z-40');
+            sidebar.classList.toggle('h-full');
+        }
+        
+        function updateTempDisplay(value) {
+            document.getElementById('tempDisplay').textContent = value;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+            
+            return date.toLocaleDateString();
+        }
+        
+        function formatTime(dateStr) {
+            return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-yellow-500' : 'bg-gray-700';
+            const icon = type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+            
+            toast.className = `toast-enter ${bgColor} text-white px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-sm`;
+            toast.innerHTML = `
+                <i class="fas ${icon}"></i>
+                <span>${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100px)';
+                toast.style.transition = 'all 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
