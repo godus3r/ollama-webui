@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Highlight.js for syntax highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <link id="hljsTheme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -17,6 +17,13 @@
         * {
             font-family: var(--interface-font, 'Inter'), sans-serif;
             font-size: var(--interface-font-size, 14px);
+        }
+        
+        /* Question font - only for user message content (overrides interface font) */
+        .user-message-content,
+        .user-message-content * {
+            font-family: var(--question-font, 'Inter'), sans-serif !important;
+            font-size: var(--question-font-size, 14px) !important;
         }
         
         /* Answer font - only for AI message content (overrides interface font) */
@@ -115,7 +122,7 @@
             position: sticky;
             top: 0.4rem;
             float: right;
-            margin: 0 0.5rem 0 0;
+            margin: 0.4rem 0.5rem 0 0;
             padding: 0.2rem 0.5rem;
             border-radius: 9999px;
             font-size: 0.6rem;
@@ -125,6 +132,7 @@
             border: none;
             background: transparent;
             color: #d1d5db;
+            line-height: 1;
         }
         
         .copy-code-chip:hover {
@@ -178,6 +186,11 @@
             border-radius: 0.5rem;
             padding: 0.5rem;
             margin-bottom: 0.5rem;
+            cursor: default;
+        }
+        
+        .model-card button {
+            cursor: pointer !important;
         }
         
         /* Confirmation Modal */
@@ -188,9 +201,44 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(4px);
+            background: rgba(0,0,0,0.3);
         }
+        
+        /* Chat item animations */
+        @keyframes chatSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @keyframes chatSlideOut {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+                max-height: 100px;
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-20px);
+                max-height: 0;
+                padding: 0;
+                margin: 0;
+            }
+        }
+        
+        .chat-item-enter {
+            animation: chatSlideIn 0.3s ease-out;
+        }
+        
+        .chat-item-exit {
+            animation: chatSlideOut 0.3s ease-out forwards;
+        }
+
         
         .confirm-modal-content {
             background: white;
@@ -198,7 +246,7 @@
             padding: 1.5rem;
             max-width: 400px;
             width: 90%;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0,0,0,0.05);
         }
         
         .confirm-modal-content.dark {
@@ -243,21 +291,27 @@
             top: 50%;
             transform: translateY(-50%);
             pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-out;
+        }
+        
+        .scroll-nav-container.visible {
+            opacity: 1;
         }
         
         .scroll-nav-btn {
-            padding: 0.4rem 0.75rem;
+            padding: 0.5rem;
             border-radius: 9999px;
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            justify-content: center;
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-            font-size: 0.7rem;
-            font-weight: 500;
-            white-space: nowrap;
+            font-size: 0.75rem;
             pointer-events: auto;
+            width: 32px;
+            height: 32px;
         }
         
         .scroll-nav-btn:hover {
@@ -266,6 +320,28 @@
         
         .scroll-nav-btn i {
             font-size: 0.6rem;
+        }
+        
+        /* Pointer cursor for all clickable elements */
+        button, select, a, [onclick], .toggle-switch, 
+        input[type="button"], input[type="submit"], 
+        .model-card, .scroll-nav-btn, .copy-code-chip,
+        label[for], summary {
+            cursor: pointer !important;
+        }
+        
+        /* Chat input expansion - grows upward */
+        #inputArea {
+            position: relative;
+        }
+        
+        #inputArea .max-w-4xl {
+            position: relative;
+        }
+        
+        #messageInput {
+            position: relative;
+            transform-origin: bottom center;
         }
         
         /* System prompt popup */
@@ -374,6 +450,56 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
+        
+        /* Model dropdown menu */
+        .model-dropdown {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            margin-bottom: 0.5rem;
+            border-radius: 0.75rem;
+            padding: 0.5rem;
+            min-width: 280px;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            z-index: 50;
+        }
+        
+        .model-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .model-dropdown-item:hover {
+            background: rgba(147, 51, 234, 0.1);
+        }
+        
+        /* Status dot animations */
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+        
+        .status-dot-running {
+            animation: pulseDot 1.5s ease-in-out infinite;
+        }
+        
+        /* Model info tooltip - positioned outside dropdown to the left */
+        .model-info-tooltip {
+            position: fixed;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            min-width: 180px;
+            font-size: 0.65rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 200;
+        }
     </style>
 </head>
 <body class="h-screen overflow-hidden bg-white text-gray-900">
@@ -393,44 +519,26 @@
                 </div>
             </div>
             
-            <!-- Model Selector -->
-            <div id="modelSection" class="p-4 border-b border-gray-200">
-                <div class="flex items-center justify-between mb-2">
-                    <label id="modelLabel" class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Model</label>
-                    <span id="availableModelsCount" class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full font-medium">0</span>
-                </div>
-                <div class="relative">
-                    <select id="modelSelector" onchange="changeModel(this.value)" class="w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm">
-                        <option value="">Loading models...</option>
-                    </select>
-                    <i id="modelDropdownIcon" class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none z-10"></i>
-                </div>
-                
-                <!-- Load Model Button -->
-                <button id="loadModelBtn" onclick="loadModel()" class="w-full mt-3 py-2 px-4 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
+            <!-- Hidden Model Elements (for settings and dropdown compatibility) -->
+            <div id="modelSection" class="hidden">
+                <label id="modelLabel" class="hidden">Select Model</label>
+                <span id="availableModelsCount" class="hidden">0</span>
+                <select id="modelSelector" class="hidden">
+                    <option value="">Loading models...</option>
+                </select>
+                <i id="modelDropdownIcon" class="hidden"></i>
+                <button id="loadModelBtn" onclick="loadModel()" class="hidden">
                     <i class="fas fa-play"></i>
                     <span>Start Model</span>
                 </button>
-                
-                <!-- Running Models Section -->
-                <div id="runningModelsSection" class="mt-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Running Models</p>
-                        <span id="runningModelsCount" class="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full font-medium">0</span>
-                    </div>
-                    <div id="runningModelsList" class="space-y-2 overflow-y-auto scrollbar-thin" style="max-height: none;">
-                        <p class="text-xs text-gray-400 text-center py-2">No models running</p>
-                    </div>
+                <div id="runningModelsSection" class="hidden">
+                    <span id="runningModelsCount" class="hidden">0</span>
+                    <div id="runningModelsList" class="hidden"></div>
                 </div>
             </div>
             
             <!-- Chat Sessions -->
-            <div id="chatSessionsSection" class="flex-1 overflow-y-auto scrollbar-thin p-3 border-b border-gray-200">
-                <div class="flex items-center justify-between mb-2 px-2">
-                    <p id="recentChatsLabel" class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recent Chats</p>
-                    <span id="totalMessagesCount" class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">0 messages</span>
-                </div>
-                
+            <div id="chatSessionsSection" class="flex-1 overflow-y-auto scrollbar-thin p-3">
                 <!-- New Chat Button -->
                 <button id="newChatBtn" onclick="createNewChat()" class="w-full mb-3 py-2.5 px-4 rounded-xl border-2 border-dashed border-gray-300 hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 flex items-center justify-center gap-2 group text-gray-700 hover:text-purple-600">
                     <i class="fas fa-plus group-hover:rotate-90 transition-transform duration-200"></i>
@@ -455,28 +563,20 @@
         
         <!-- Main Chat Area -->
         <main id="mainArea" class="flex-1 flex flex-col bg-white relative">
-            <!-- Header -->
-            <header id="header" class="border-b border-gray-200 flex items-center justify-between px-6 py-3 bg-white">
-                <div class="flex items-center gap-4">
-                    <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-gray-100 transition-colors lg:hidden">
-                        <i class="fas fa-bars text-gray-600"></i>
-                    </button>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h2 id="chatTitle" class="font-semibold text-gray-900">New Chat</h2>
-                            <button onclick="renameCurrentChat()" id="renameChatBtn" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Rename chat">
-                                <i class="fas fa-pen text-gray-400 hover:text-gray-600 text-xs"></i>
-                            </button>
-                        </div>
-                        <p id="chatSubtitle" class="text-xs text-gray-500"><span id="chatMessageCount">0 messages</span> • <span id="chatTokenCount">0 tokens</span></p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="toggleTheme()" class="p-2.5 rounded-xl hover:bg-gray-100 transition-colors" title="Toggle theme">
-                        <i id="themeIcon" class="fas fa-moon text-gray-600"></i>
-                    </button>
-                </div>
+            <!-- Minimal Header - Just theme toggle -->
+            <header id="header" class="absolute top-3 right-3 z-20">
+                <button onclick="toggleTheme()" class="p-2.5 rounded-xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-gray-100 transition-colors shadow-md" title="Toggle theme">
+                    <i id="themeIcon" class="fas fa-moon text-gray-600"></i>
+                </button>
             </header>
+            
+            <!-- Hidden elements for chat stats -->
+            <div class="hidden">
+                <span id="chatTitle">New Chat</span>
+                <span id="chatMessageCount">0 messages</span>
+                <span id="chatTokenCount">0 tokens</span>
+                <span id="chatSubtitle"></span>
+            </div>
             
             <!-- Messages Container -->
             <div id="messagesContainer" class="flex-1 overflow-y-auto scrollbar-thin p-6 bg-gray-50 relative">
@@ -516,18 +616,16 @@
             
             <!-- Scroll Navigation Buttons Container - Outside messages container, positioned fixed -->
             <div id="scrollNavContainer" class="scroll-nav-container" style="position: fixed; right: 380px;">
-                <button id="scrollTopBtn" onclick="scrollToTop()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;">
+                <button id="scrollTopBtn" onclick="scrollToTop()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;" title="Go to top">
                     <i class="fas fa-chevron-up"></i>
-                    <span>Go to top</span>
                 </button>
-                <button id="scrollBottomBtn" onclick="scrollToBottom()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;">
+                <button id="scrollBottomBtn" onclick="scrollToBottom()" class="scroll-nav-btn bg-white border border-gray-200 text-gray-600 hover:bg-gray-100" style="display: none;" title="Go to bottom">
                     <i class="fas fa-chevron-down"></i>
-                    <span>Go to bottom</span>
                 </button>
             </div>
             
-            <!-- Input Area -->
-            <div id="inputArea" class="p-4 border-t border-gray-200 bg-white relative">
+            <!-- Input Area - Transparent background, uses messages container bg -->
+            <div id="inputArea" class="p-4 relative bg-transparent">
                 <div class="max-w-4xl mx-auto">
                     <div class="relative flex items-end gap-3">
                         <div class="flex-1 relative">
@@ -549,13 +647,22 @@
                             </div>
                             <textarea 
                                 id="messageInput" 
-                                placeholder="Type your message..." 
-                                rows="1"
-                                class="w-full py-4 px-5 pr-36 rounded-2xl border border-gray-300 bg-white text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40"
+                                placeholder="Press Enter to send, Shift+Enter for new line" 
+                                rows="2"
+                                class="w-full py-4 px-5 pr-48 rounded-2xl border border-gray-300 bg-white text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                style="min-height: 80px; max-height: 400px;"
                                 onkeydown="handleKeyDown(event)"
                                 oninput="autoResize(this)"
                             ></textarea>
                             <div class="absolute right-3 bottom-3 flex items-center gap-2">
+                                <!-- Model Status Dropdown -->
+                                <div class="relative">
+                                    <button id="currentModelDisplay" onclick="toggleModelDropdown()" class="text-xs font-medium text-purple-600 mr-1 cursor-pointer hover:text-purple-700 flex items-center gap-1">
+                                        No model loaded
+                                        <i class="fas fa-chevron-up text-[0.5rem]"></i>
+                                    </button>
+                                    <div id="modelDropdownMenu" class="model-dropdown hidden bg-white border border-gray-200"></div>
+                                </div>
                                 <!-- System Prompt Button -->
                                 <button 
                                     id="systemPromptBtn"
@@ -586,7 +693,7 @@
                         </div>
                     </div>
                     <p id="inputHint" class="text-xs text-gray-400 text-center mt-3">
-                        <span id="currentModelDisplay" class="font-medium text-purple-600">No model loaded</span> • Press Enter to send, Shift+Enter for new line
+                        &nbsp;
                     </p>
                 </div>
             </div>
@@ -599,7 +706,7 @@
         <div id="settingsContent" class="absolute left-0 top-0 bottom-0 w-[340px] shadow-2xl p-5 overflow-y-auto bg-white scrollbar-thin pointer-events-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 id="settingsTitle" class="text-xl font-bold text-gray-900">Settings</h3>
-                <button onclick="closeSettings()" class="px-3 py-1.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors flex items-center gap-2">
+                <button onclick="closeSettings()" class="px-3 py-1.5 rounded-full bg-rose-700 hover:bg-rose-800 text-white transition-colors flex items-center gap-2">
                     <i class="fas fa-times text-xs"></i>
                     <span class="text-sm font-medium">Close</span>
                 </button>
@@ -617,7 +724,7 @@
                 <div id="connectionSection" class="space-y-3 mt-3 pl-4 collapsed" style="max-height: 0;">
                     <div>
                         <label class="text-sm text-gray-500 mb-1 block">Ollama API URL</label>
-                        <input type="text" id="apiUrl" value="http://127.0.0.1:11434" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <input type="text" id="apiUrl" value="http://127.0.0.1:11434" onchange="autoSaveApiUrl()" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500">
                     </div>
                     <div class="flex items-center gap-3">
                         <button onclick="testConnection()" id="testConnBtn" class="py-2 px-4 rounded-xl border border-gray-300 hover:bg-gray-100 transition-colors text-sm flex items-center gap-2 text-gray-700">
@@ -674,7 +781,7 @@
                     
                     <div>
                         <label id="systemPromptLabel" class="text-sm text-gray-600 mb-1 block">Global System Prompt (optional)</label>
-                        <textarea id="systemPrompt" rows="3" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" placeholder="You are a helpful assistant..."></textarea>
+                        <textarea id="systemPrompt" rows="3" onchange="autoSaveSystemPrompt()" class="w-full py-2.5 px-4 rounded-xl border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" placeholder="You are a helpful assistant..."></textarea>
                     </div>
                 </div>
             </div>
@@ -690,10 +797,26 @@
                 </button>
                 <div id="appearanceSection" class="space-y-3 mt-3 pl-4 collapsed" style="max-height: 0;">
                     <div id="darkModeContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
-                        <span class="text-gray-700">Dark Mode</span>
-                        <button id="darkModeToggle" onclick="toggleTheme()" class="w-14 h-7 rounded-full bg-gray-300 relative transition-colors duration-300">
-                            <span id="toggleKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-all duration-300 shadow-md"></span>
-                        </button>
+                        <span id="darkModeLabel" class="text-gray-700 text-sm font-medium">Dark Mode</span>
+                        <div id="darkModeToggle" onclick="toggleTheme()" class="toggle-switch bg-gray-300">
+                            <span class="toggle-knob"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Show Answer Icon Toggle -->
+                    <div id="showAnswerIconContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
+                        <span id="showAnswerIconLabel" class="text-gray-700 text-sm font-medium">Remove icon on answers</span>
+                        <div id="showAnswerIconToggle" onclick="toggleShowAnswerIcon()" class="toggle-switch bg-gray-300">
+                            <span class="toggle-knob"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Remove Answer Background Toggle -->
+                    <div id="removeAnswerBgContainer" class="flex items-center justify-between py-3 px-4 rounded-xl border border-gray-300">
+                        <span id="removeAnswerBgLabel" class="text-gray-700 text-sm font-medium">Remove answer background card</span>
+                        <div id="removeAnswerBgToggle" onclick="toggleRemoveAnswerBackground()" class="toggle-switch bg-purple-500 active">
+                            <span class="toggle-knob" style="transform: translateX(20px);"></span>
+                        </div>
                     </div>
                     
                     <!-- Fonts Heading -->
@@ -715,6 +838,23 @@
                                 <button onclick="changeFontSize('interface', -1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-minus text-xs"></i></button>
                                 <input type="number" id="interfaceFontSize" value="14" min="10" max="24" onchange="setFontSize('interface', this.value)" class="w-12 text-center text-sm border-x border-gray-300 py-1 focus:outline-none">
                                 <button onclick="changeFontSize('interface', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Question Font -->
+                    <div id="questionFontContainer" class="py-3 px-4 rounded-xl border border-gray-300">
+                        <label id="questionFontLabel" class="text-sm text-gray-600 mb-2 block">Question Font</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <select id="questionFontSelector" onchange="changeQuestionFont(this.value)" class="w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none"></i>
+                            </div>
+                            <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button onclick="changeFontSize('question', -1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-minus text-xs"></i></button>
+                                <input type="number" id="questionFontSize" value="14" min="10" max="24" onchange="setFontSize('question', this.value)" class="w-12 text-center text-sm border-x border-gray-300 py-1 focus:outline-none">
+                                <button onclick="changeFontSize('question', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
                             </div>
                         </div>
                     </div>
@@ -751,6 +891,14 @@
                                 <button onclick="changeFontSize('code', 1)" class="px-2 py-1 hover:bg-gray-100 text-gray-600"><i class="fas fa-plus text-xs"></i></button>
                             </div>
                         </div>
+                        
+                        <!-- Code Theme Selector -->
+                        <label id="codeThemeLabel" class="text-sm text-gray-600 mb-2 block mt-3">Code Highlighting</label>
+                        <div class="relative">
+                            <select id="codeThemeSelector" onchange="changeCodeTheme(this.value)" class="w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none"></i>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -780,10 +928,6 @@
                 </div>
             </div>
             
-            <!-- Save Button -->
-            <button onclick="saveSettings()" class="w-full py-3 rounded-xl gradient-bg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg">
-                Save Settings
-            </button>
         </div>
     </div>
     
@@ -807,14 +951,27 @@
             autostartModels: false,
             interfaceFont: 'Inter',
             interfaceFontSize: 14,
+            questionFont: 'Inter',
+            questionFontSize: 14,
             answerFont: 'Inter',
             answerFontSize: 14,
             codeFont: 'JetBrains Mono',
-            codeFontSize: 13
+            codeFontSize: 13,
+            codeTheme: 'atom-one-dark',
+            removeAnswerBackground: true,
+            showAnswerIcon: true
         };
+        
+        // Available code themes
+        const codeThemes = [
+            { id: 'none', name: 'None (Plain)', url: '' },
+            { id: 'atom-one-dark', name: 'Atom One Dark', url: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css' },
+            { id: 'github-dark', name: 'GitHub Dark', url: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css' }
+        ];
         
         // Available fonts
         const interfaceFonts = ['Inter', 'Roboto', 'Open Sans', 'Google Sans'];
+        const questionFonts = ['Inter', 'Roboto', 'Open Sans', 'Google Sans'];
         const answerFonts = ['Inter', 'Roboto', 'Open Sans', 'Google Sans'];
         const codeFonts = ['JetBrains Mono', 'Fira Code', 'Source Code Pro', 'Roboto Mono', 'Google Sans Mono', 'Consolas'];
         
@@ -833,6 +990,9 @@
         let responseStartTime = null;
         let currentTokenCount = 0;
         let tokenSpeedInterval = null;
+        let scrollButtonsTimeout = null;
+        let isScrollButtonsVisible = false;
+        let generatingChatId = null; // Track which chat is currently generating
         
         // Ollama logo URL - cached
         const OLLAMA_LOGO_URL = 'https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7';
@@ -843,6 +1003,7 @@
             loadChatSessions();
             applyTheme();
             applyFonts();
+            applyCodeTheme();
             updateSettingsToggles();
             initializeApp();
             setupScrollListener();
@@ -900,14 +1061,49 @@
                 
                 lastScrollTop = currentScrollTop;
                 
-                // Update scroll navigation buttons visibility
-                updateScrollButtons();
+                // Show scroll buttons on scroll activity
+                showScrollButtonsTemporarily();
             }, { passive: true });
             
             // Also update scroll buttons on window resize
             window.addEventListener('resize', () => {
                 updateScrollButtons();
             }, { passive: true });
+            
+            // Show scroll buttons on mouse movement within messages container
+            container.addEventListener('mousemove', () => {
+                showScrollButtonsTemporarily();
+            }, { passive: true });
+            
+            // Show scroll buttons on keyboard activity
+            document.addEventListener('keydown', (e) => {
+                // Only for navigation keys
+                if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                    showScrollButtonsTemporarily();
+                }
+            }, { passive: true });
+        }
+        
+        function showScrollButtonsTemporarily() {
+            const navContainer = document.getElementById('scrollNavContainer');
+            
+            // Update button positions and visibility
+            updateScrollButtons();
+            
+            // Show the container
+            navContainer.classList.add('visible');
+            isScrollButtonsVisible = true;
+            
+            // Clear existing timeout
+            if (scrollButtonsTimeout) {
+                clearTimeout(scrollButtonsTimeout);
+            }
+            
+            // Hide after 2 seconds of inactivity
+            scrollButtonsTimeout = setTimeout(() => {
+                navContainer.classList.remove('visible');
+                isScrollButtonsVisible = false;
+            }, 2000);
         }
         
         function updateScrollButtons() {
@@ -1006,11 +1202,18 @@
         function loadConfig() {
             const saved = localStorage.getItem(CONFIG_KEY);
             if (saved) {
-                config = { ...config, ...JSON.parse(saved) };
+                const savedConfig = JSON.parse(saved);
+                // Merge saved config with defaults (to handle new properties)
+                config = { ...config, ...savedConfig };
             }
             
+            // Update UI with loaded config values
             document.getElementById('apiUrl').value = config.apiUrl;
             document.getElementById('systemPrompt').value = config.systemPrompt || '';
+            
+            // Apply loaded settings
+            applyFonts();
+            applyCodeTheme();
         }
         
         function saveConfig() {
@@ -1026,24 +1229,69 @@
             showToast('Settings saved successfully!', 'success');
         }
         
+        // Auto-save functions for settings
+        function autoSaveApiUrl() {
+            config.apiUrl = document.getElementById('apiUrl').value;
+            saveConfig();
+        }
+        
+        function autoSaveSystemPrompt() {
+            config.systemPrompt = document.getElementById('systemPrompt').value;
+            saveConfig();
+        }
+        
         function updateSettingsToggles() {
             const multiToggle = document.getElementById('multiModelToggle');
             const autostartToggle = document.getElementById('autostartToggle');
+            const removeAnswerBgToggle = document.getElementById('removeAnswerBgToggle');
+            const showAnswerIconToggle = document.getElementById('showAnswerIconToggle');
             
             if (config.allowMultipleModels) {
                 multiToggle.classList.add('active', 'bg-purple-500');
                 multiToggle.classList.remove('bg-gray-300');
+                multiToggle.querySelector('.toggle-knob').style.transform = 'translateX(20px)';
             } else {
                 multiToggle.classList.remove('active', 'bg-purple-500');
                 multiToggle.classList.add('bg-gray-300');
+                multiToggle.querySelector('.toggle-knob').style.transform = 'translateX(0)';
             }
             
             if (config.autostartModels) {
                 autostartToggle.classList.add('active', 'bg-purple-500');
                 autostartToggle.classList.remove('bg-gray-300');
+                autostartToggle.querySelector('.toggle-knob').style.transform = 'translateX(20px)';
             } else {
                 autostartToggle.classList.remove('active', 'bg-purple-500');
                 autostartToggle.classList.add('bg-gray-300');
+                autostartToggle.querySelector('.toggle-knob').style.transform = 'translateX(0)';
+            }
+            
+            if (removeAnswerBgToggle) {
+                if (config.removeAnswerBackground) {
+                    removeAnswerBgToggle.classList.add('active', 'bg-purple-500');
+                    removeAnswerBgToggle.classList.remove('bg-gray-300');
+                    removeAnswerBgToggle.querySelector('.toggle-knob').style.transform = 'translateX(20px)';
+                } else {
+                    removeAnswerBgToggle.classList.remove('active', 'bg-purple-500');
+                    removeAnswerBgToggle.classList.add('bg-gray-300');
+                    removeAnswerBgToggle.querySelector('.toggle-knob').style.transform = 'translateX(0)';
+                }
+            }
+            
+            if (showAnswerIconToggle) {
+                // Note: showAnswerIcon = true means SHOW icon, so toggle OFF means hide
+                // The switch label says "Remove icon on answers" so ON = hide icon
+                if (!config.showAnswerIcon) {
+                    // Icon is hidden (switch is ON)
+                    showAnswerIconToggle.classList.add('active', 'bg-purple-500');
+                    showAnswerIconToggle.classList.remove('bg-gray-300');
+                    showAnswerIconToggle.querySelector('.toggle-knob').style.transform = 'translateX(20px)';
+                } else {
+                    // Icon is shown (switch is OFF)
+                    showAnswerIconToggle.classList.remove('active', 'bg-purple-500');
+                    showAnswerIconToggle.classList.add('bg-gray-300');
+                    showAnswerIconToggle.querySelector('.toggle-knob').style.transform = 'translateX(0)';
+                }
             }
         }
         
@@ -1059,8 +1307,38 @@
             updateSettingsToggles();
         }
         
+        function toggleRemoveAnswerBackground() {
+            config.removeAnswerBackground = !config.removeAnswerBackground;
+            saveConfig();
+            updateSettingsToggles();
+            
+            // Re-render messages to apply the change
+            if (currentChatId) {
+                const chat = chatSessions.find(c => c.id === currentChatId);
+                if (chat) renderMessages(chat.messages);
+            }
+        }
+        
+        function toggleShowAnswerIcon() {
+            config.showAnswerIcon = !config.showAnswerIcon;
+            saveConfig();
+            updateSettingsToggles();
+            
+            // Re-render messages to apply the change
+            if (currentChatId) {
+                const chat = chatSessions.find(c => c.id === currentChatId);
+                if (chat) renderMessages(chat.messages);
+            }
+        }
+        
         function changeInterfaceFont(font) {
             config.interfaceFont = font;
+            saveConfig();
+            applyFonts();
+        }
+        
+        function changeQuestionFont(font) {
+            config.questionFont = font;
             saveConfig();
             applyFonts();
         }
@@ -1077,9 +1355,35 @@
             applyFonts();
         }
         
+        function changeCodeTheme(themeId) {
+            config.codeTheme = themeId;
+            saveConfig();
+            applyCodeTheme();
+            
+            // Re-render messages to apply new theme
+            if (currentChatId) {
+                const chat = chatSessions.find(c => c.id === currentChatId);
+                if (chat) renderMessages(chat.messages);
+            }
+        }
+        
+        function applyCodeTheme() {
+            const theme = codeThemes.find(t => t.id === config.codeTheme) || codeThemes[1]; // Default to atom-one-dark
+            const linkEl = document.getElementById('hljsTheme');
+            
+            if (theme.id === 'none' || !theme.url) {
+                // Remove theme - no syntax highlighting colors
+                linkEl.href = '';
+            } else {
+                linkEl.href = theme.url;
+            }
+        }
+        
         function applyFonts() {
             document.documentElement.style.setProperty('--interface-font', config.interfaceFont);
             document.documentElement.style.setProperty('--interface-font-size', config.interfaceFontSize + 'px');
+            document.documentElement.style.setProperty('--question-font', config.questionFont);
+            document.documentElement.style.setProperty('--question-font-size', config.questionFontSize + 'px');
             document.documentElement.style.setProperty('--answer-font', config.answerFont);
             document.documentElement.style.setProperty('--answer-font-size', config.answerFontSize + 'px');
             document.documentElement.style.setProperty('--code-font', config.codeFont);
@@ -1100,6 +1404,8 @@
             
             if (type === 'interface') {
                 config.interfaceFontSize = size;
+            } else if (type === 'question') {
+                config.questionFontSize = size;
             } else if (type === 'answer') {
                 config.answerFontSize = size;
             } else if (type === 'code') {
@@ -1112,14 +1418,23 @@
         
         function populateFontSelectors() {
             const interfaceSelector = document.getElementById('interfaceFontSelector');
+            const questionSelector = document.getElementById('questionFontSelector');
             const answerSelector = document.getElementById('answerFontSelector');
             const codeSelector = document.getElementById('codeFontSelector');
+            const codeThemeSelector = document.getElementById('codeThemeSelector');
             const isDark = config.theme === 'dark';
             
             // Populate interface fonts
             if (interfaceSelector) {
                 interfaceSelector.innerHTML = interfaceFonts.map(font => 
                     `<option value="${font}" ${font === config.interfaceFont ? 'selected' : ''} style="font-family: '${font}'">${font}</option>`
+                ).join('');
+            }
+            
+            // Populate question fonts
+            if (questionSelector) {
+                questionSelector.innerHTML = questionFonts.map(font => 
+                    `<option value="${font}" ${font === config.questionFont ? 'selected' : ''} style="font-family: '${font}'">${font}</option>`
                 ).join('');
             }
             
@@ -1137,18 +1452,31 @@
                 ).join('');
             }
             
+            // Populate code themes
+            if (codeThemeSelector) {
+                codeThemeSelector.innerHTML = codeThemes.map(theme => 
+                    `<option value="${theme.id}" ${theme.id === config.codeTheme ? 'selected' : ''}>${theme.name}</option>`
+                ).join('');
+                
+                // Apply theme styling
+                codeThemeSelector.className = `w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+            }
+            
             // Update font size inputs
             const interfaceSizeInput = document.getElementById('interfaceFontSize');
+            const questionSizeInput = document.getElementById('questionFontSize');
             const answerSizeInput = document.getElementById('answerFontSize');
             const codeSizeInput = document.getElementById('codeFontSize');
             
             if (interfaceSizeInput) interfaceSizeInput.value = config.interfaceFontSize;
+            if (questionSizeInput) questionSizeInput.value = config.questionFontSize;
             if (answerSizeInput) answerSizeInput.value = config.answerFontSize;
             if (codeSizeInput) codeSizeInput.value = config.codeFontSize;
             
             // Apply theme to selectors
             const selectClass = `w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
             if (interfaceSelector) interfaceSelector.className = selectClass;
+            if (questionSelector) questionSelector.className = selectClass;
             if (answerSelector) answerSelector.className = selectClass;
             if (codeSelector) codeSelector.className = selectClass;
             
@@ -1162,6 +1490,12 @@
                 interfaceSizeInput.parentElement.className = sizeContainerClass;
                 interfaceSizeInput.previousElementSibling.className = sizeBtnClass;
                 interfaceSizeInput.nextElementSibling.className = sizeBtnClass;
+            }
+            if (questionSizeInput) {
+                questionSizeInput.className = sizeInputClass;
+                questionSizeInput.parentElement.className = sizeContainerClass;
+                questionSizeInput.previousElementSibling.className = sizeBtnClass;
+                questionSizeInput.nextElementSibling.className = sizeBtnClass;
             }
             if (answerSizeInput) {
                 answerSizeInput.className = sizeInputClass;
@@ -1265,6 +1599,14 @@
         
         function confirmDeleteChat(chatId, event) {
             event.stopPropagation();
+            
+            // Check if chat has 0 messages - delete directly without confirmation
+            const chat = chatSessions.find(c => c.id === chatId);
+            if (chat && chat.messages.length === 0) {
+                deleteChat(chatId);
+                return;
+            }
+            
             showConfirmDialog(
                 'Delete Chat',
                 'Are you sure you want to delete this chat? This action cannot be undone.',
@@ -1313,6 +1655,7 @@
                 messages: [],
                 model: config.currentModel,
                 systemPrompt: '',
+                unreadCount: 0,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
@@ -1329,7 +1672,7 @@
             messagesDiv.innerHTML = '';
             messagesDiv.appendChild(createWelcomeScreen());
             
-            renderChatSessions();
+            renderChatSessions(true); // Pass true to animate new chat
             updateTotalMessagesCount();
             showToast('New chat created', 'success');
         }
@@ -1379,8 +1722,27 @@
                 document.getElementById('chatTitle').textContent = chat.title;
                 updateChatStats(chat);
                 
+                // Clear unread count when viewing chat
+                if (chat.unreadCount > 0) {
+                    chat.unreadCount = 0;
+                    saveChatSessions();
+                }
+                
                 renderMessages(chat.messages);
                 renderChatSessions();
+                
+                // Update send/stop button visibility based on whether THIS chat is generating
+                if (generatingChatId === chatId) {
+                    // This chat is generating - show stop button
+                    document.getElementById('stopBtn').classList.remove('hidden');
+                    document.getElementById('sendBtn').classList.add('hidden');
+                    document.getElementById('sendIcon').className = 'fas fa-spinner animate-spin';
+                } else {
+                    // This chat is NOT generating - show send button
+                    document.getElementById('stopBtn').classList.add('hidden');
+                    document.getElementById('sendBtn').classList.remove('hidden');
+                    document.getElementById('sendIcon').className = 'fas fa-paper-plane';
+                }
             }
         }
         
@@ -1397,31 +1759,71 @@
         }
         
         function deleteChat(chatId) {
-            chatSessions = chatSessions.filter(c => c.id !== chatId);
-            saveChatSessions();
-            
-            if (currentChatId === chatId) {
-                if (chatSessions.length > 0) {
-                    loadChat(chatSessions[0].id);
-                } else {
-                    createNewChat();
+            // If we're deleting the chat that's currently generating, stop it first
+            if (generatingChatId === chatId) {
+                stopGenerating();
+                isGenerating = false;
+                generatingChatId = null;
+                
+                // Reset UI
+                const sendIcon = document.getElementById('sendIcon');
+                sendIcon.className = 'fas fa-paper-plane';
+                document.getElementById('stopBtn').classList.add('hidden');
+                document.getElementById('sendBtn').classList.remove('hidden');
+                
+                // Clear token speed interval
+                if (tokenSpeedInterval) {
+                    clearInterval(tokenSpeedInterval);
+                    tokenSpeedInterval = null;
                 }
             }
             
-            renderChatSessions();
-            updateTotalMessagesCount();
-            showToast('Chat deleted', 'success');
+            // Animate the deletion first
+            const chatItem = document.getElementById(`chat-item-${chatId}`);
+            if (chatItem) {
+                chatItem.classList.add('chat-item-exit');
+                
+                // Wait for animation to complete before removing
+                setTimeout(() => {
+                    chatSessions = chatSessions.filter(c => c.id !== chatId);
+                    saveChatSessions();
+                    
+                    if (currentChatId === chatId) {
+                        if (chatSessions.length > 0) {
+                            loadChat(chatSessions[0].id);
+                        } else {
+                            createNewChat();
+                        }
+                    }
+                    
+                    renderChatSessions();
+                    updateTotalMessagesCount();
+                    showToast('Chat deleted', 'success');
+                }, 300);
+            } else {
+                // Fallback if element not found
+                chatSessions = chatSessions.filter(c => c.id !== chatId);
+                saveChatSessions();
+                
+                if (currentChatId === chatId) {
+                    if (chatSessions.length > 0) {
+                        loadChat(chatSessions[0].id);
+                    } else {
+                        createNewChat();
+                    }
+                }
+                
+                renderChatSessions();
+                updateTotalMessagesCount();
+                showToast('Chat deleted', 'success');
+            }
         }
         
         function updateTotalMessagesCount() {
-            let total = 0;
-            chatSessions.forEach(chat => {
-                total += chat.messages.length;
-            });
-            document.getElementById('totalMessagesCount').textContent = `${total} messages`;
+            // Function kept for compatibility but no longer displays
         }
         
-        function renderChatSessions() {
+        function renderChatSessions(animateNewChat = false) {
             const container = document.getElementById('chatSessions');
             const isDark = config.theme === 'dark';
             
@@ -1432,30 +1834,55 @@
                 return;
             }
             
-            container.innerHTML = chatSessions.map(chat => {
+            container.innerHTML = chatSessions.map((chat, index) => {
                 const isActive = chat.id === currentChatId;
+                const isNew = animateNewChat && index === 0;
+                const unreadCount = chat.unreadCount || 0;
+                const isGeneratingThisChat = generatingChatId === chat.id;
                 return `
                     <div 
+                        id="chat-item-${chat.id}"
                         onclick="loadChat('${chat.id}')"
-                        class="group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                        class="group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${isNew ? 'chat-item-enter' : ''} ${
                             isActive 
                                 ? (isDark ? 'bg-purple-900/40 border border-purple-600' : 'bg-purple-100 border border-purple-300')
                                 : (isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100')
                         }"
                     >
-                        <div class="w-9 h-9 rounded-lg ${isActive ? 'bg-purple-500' : (isDark ? 'bg-gray-700' : 'bg-gray-200')} flex items-center justify-center flex-shrink-0">
-                            <i class="fas fa-comment-dots ${isActive ? 'text-white' : (isDark ? 'text-gray-400' : 'text-gray-500')} text-sm"></i>
+                        <div class="w-9 h-9 rounded-lg ${isActive ? 'bg-purple-500' : (isDark ? 'bg-gray-700' : 'bg-gray-200')} flex items-center justify-center flex-shrink-0 relative">
+                            ${isGeneratingThisChat ? `
+                                <div class="flex items-center gap-0.5" title="Generating...">
+                                    <span class="typing-dot w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : (isDark ? 'bg-gray-400' : 'bg-gray-500')}"></span>
+                                    <span class="typing-dot w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : (isDark ? 'bg-gray-400' : 'bg-gray-500')}"></span>
+                                    <span class="typing-dot w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : (isDark ? 'bg-gray-400' : 'bg-gray-500')}"></span>
+                                </div>
+                            ` : `<i class="fas fa-comment-dots ${isActive ? 'text-white' : (isDark ? 'text-gray-400' : 'text-gray-500')} text-sm"></i>`}
                         </div>
                         <div class="flex-1 min-w-0">
                             <p class="font-medium text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-900'}">${escapeHtml(chat.title)}</p>
                             <p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}">${formatDate(chat.updatedAt)} • ${chat.messages.length} msg</p>
                         </div>
-                        <button 
-                            onclick="confirmDeleteChat('${chat.id}', event)"
-                            class="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg ${isDark ? 'hover:bg-red-900/50' : 'hover:bg-red-100'} transition-all"
-                        >
-                            <i class="fas fa-trash text-xs text-red-500"></i>
-                        </button>
+                        <div class="flex items-center gap-1">
+                            ${unreadCount > 0 ? `
+                                <span class="w-5 h-5 rounded-full bg-green-500 text-white text-[0.6rem] font-bold flex items-center justify-center">${unreadCount}</span>
+                            ` : ''}
+                            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                <button 
+                                    onclick="renameChatById('${chat.id}', event)"
+                                    class="p-1.5 rounded-lg ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'} transition-all"
+                                    title="Rename chat"
+                                >
+                                    <i class="fas fa-pen text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}"></i>
+                                </button>
+                                <button 
+                                    onclick="confirmDeleteChat('${chat.id}', event)"
+                                    class="p-1.5 rounded-lg ${isDark ? 'hover:bg-red-900/50' : 'hover:bg-red-100'} transition-all"
+                                    title="Delete chat"
+                                >
+                                    <i class="fas fa-trash text-xs text-red-500"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1567,6 +1994,12 @@
                 updateSendButton();
                 updateModelDisplay();
                 
+                // Update the dropdown if it's open (for realtime UNTIL updates)
+                const menu = document.getElementById('modelDropdownMenu');
+                if (menu && !menu.classList.contains('hidden')) {
+                    renderModelDropdown();
+                }
+                
             } catch (error) {
                 console.error('Error checking running models:', error);
             }
@@ -1574,122 +2007,12 @@
         
         
         function renderRunningModels() {
-            const container = document.getElementById('runningModelsList');
+            // Running models are now shown in the dropdown near the chat input
+            // This function is kept for compatibility but no longer renders to sidebar
             const countEl = document.getElementById('runningModelsCount');
-            const isDark = config.theme === 'dark';
-            
-            countEl.textContent = runningModels.length.toString();
-            countEl.className = `text-xs px-2 py-0.5 rounded-full font-medium ${runningModels.length > 0 ? (isDark ? 'bg-green-900/50 text-green-400' : 'bg-green-100 text-green-600') : (isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500')}`;
-            
-            // Adjust max-height based on number of models (show 2 without scrollbar, scrollbar from 3rd)
-            if (runningModels.length <= 2) {
-                container.style.maxHeight = 'none';
-                container.style.overflowY = 'visible';
-            } else {
-                container.style.maxHeight = '280px';
-                container.style.overflowY = 'auto';
+            if (countEl) {
+                countEl.textContent = runningModels.length.toString();
             }
-            
-            if (runningModels.length === 0) {
-                container.innerHTML = `<p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center py-2">No models running</p>`;
-                return;
-            }
-            
-            container.innerHTML = runningModels.map(model => {
-                const modelName = model.name || model.model || 'Unknown';
-                const isSelected = modelName === config.currentModel;
-                
-                // Get actual values from ollama ps response
-                const size = model.size || 0;
-                const sizeVram = model.size_vram || 0;
-                
-                // Calculate GPU/CPU percentages based on VRAM vs total size
-                const gpuPercent = size > 0 ? Math.round((sizeVram / size) * 100) : 0;
-                const cpuPercent = 100 - gpuPercent;
-                
-                // Get details
-                const parameterSize = model.details?.parameter_size || 'N/A';
-                
-                // Calculate times from expires_at
-                const expiresAt = model.expires_at ? new Date(model.expires_at) : null;
-                const now = new Date();
-                
-                let startedTime = 'N/A';
-                let untilTime = 'N/A';
-                
-                if (expiresAt) {
-                    // Calculate remaining time
-                    const diffMs = expiresAt - now;
-                    if (diffMs > 0) {
-                        const mins = Math.floor(diffMs / 60000);
-                        const secs = Math.floor((diffMs % 60000) / 1000);
-                        untilTime = `${mins}m ${secs}s`;
-                    } else {
-                        untilTime = 'Expiring...';
-                    }
-                    
-                    // Estimate start time (5 min before expiry by default)
-                    const startedDate = new Date(expiresAt.getTime() - (5 * 60 * 1000));
-                    startedTime = formatTime12hr(startedDate);
-                }
-                
-                return `
-                    <div class="model-card ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} ${isSelected ? 'border-purple-500 border-2' : ''}">
-                        <!-- Model Name Row -->
-                        <div class="flex items-center gap-1.5 mb-2">
-                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
-                            <span class="text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex-1 break-all" title="${modelName}">${modelName}</span>
-                        </div>
-                        
-                        <!-- Action Buttons Row -->
-                        <div class="flex items-center gap-2 mb-2">
-                            ${isSelected ? `
-                                <span class="flex items-center gap-1 text-xs bg-purple-500 text-white px-2 py-1 rounded-full">
-                                    <i class="fas fa-check text-[0.6rem]"></i>
-                                    Active
-                                </span>
-                            ` : `
-                                <button onclick="selectRunningModel('${modelName}')" class="flex items-center gap-1 text-xs ${isDark ? 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50' : 'bg-purple-100 text-purple-600 hover:bg-purple-200'} px-2 py-1 rounded-full transition-colors">
-                                    <i class="fas fa-play text-[0.6rem]"></i>
-                                    Use model
-                                </button>
-                            `}
-                            <button onclick="stopModel('${modelName}', this)" class="flex items-center gap-1 text-xs ${isDark ? 'bg-red-900/50 text-red-300 hover:bg-red-800/50' : 'bg-red-100 text-red-500 hover:bg-red-200'} px-2 py-1 rounded-full transition-colors">
-                                <i class="fas fa-stop text-[0.6rem]"></i>
-                                Stop
-                            </button>
-                        </div>
-                        
-                        <!-- Stats Grid -->
-                        <div class="grid grid-cols-3 gap-1 text-center">
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Size</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${formatBytes(size)}</p>
-                            </div>
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">CPU</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${cpuPercent}%</p>
-                            </div>
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">GPU</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${gpuPercent}%</p>
-                            </div>
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Params</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${parameterSize}</p>
-                            </div>
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Started</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${startedTime}</p>
-                            </div>
-                            <div class="${isDark ? 'bg-gray-700/50' : 'bg-gray-50'} rounded p-1">
-                                <p class="stat-label ${isDark ? 'text-gray-400' : 'text-gray-500'}">Until</p>
-                                <p class="stat-value ${isDark ? 'text-white' : 'text-gray-900'}">${untilTime}</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
         }
         
         async function stopModel(modelName, btnElement) {
@@ -1949,8 +2272,13 @@
         
         function renameCurrentChat() {
             if (!currentChatId) return;
+            renameChatById(currentChatId);
+        }
+        
+        function renameChatById(chatId, event) {
+            if (event) event.stopPropagation();
             
-            const chat = chatSessions.find(c => c.id === currentChatId);
+            const chat = chatSessions.find(c => c.id === chatId);
             if (!chat) return;
             
             const newTitle = prompt('Enter new chat name:', chat.title);
@@ -1966,17 +2294,228 @@
         
         function updateModelDisplay() {
             const display = document.getElementById('currentModelDisplay');
+            const isDark = config.theme === 'dark';
             
+            let statusHtml = '';
             if (modelReady) {
-                display.textContent = `✓ ${config.currentModel}`;
-                display.className = 'font-medium text-green-600';
+                // No animation for button view - just solid green dot
+                statusHtml = `<span class="w-2 h-2 rounded-full bg-green-500"></span> ${config.currentModel}`;
+                display.className = `text-xs font-medium px-2.5 py-1 rounded-lg ${isDark ? 'bg-gray-700 text-green-400 hover:bg-gray-600' : 'bg-gray-100 text-green-600 hover:bg-gray-200'} mr-1 cursor-pointer flex items-center gap-1.5 transition-colors`;
             } else if (config.currentModel) {
-                display.textContent = `${config.currentModel} (not loaded)`;
-                display.className = 'font-medium text-yellow-600';
+                statusHtml = `<span class="w-2 h-2 rounded-full bg-red-400"></span> ${config.currentModel}`;
+                display.className = `text-xs font-medium px-2.5 py-1 rounded-lg ${isDark ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-100 text-yellow-600 hover:bg-gray-200'} mr-1 cursor-pointer flex items-center gap-1.5 transition-colors`;
             } else {
-                display.textContent = 'No model selected';
-                display.className = 'font-medium text-red-500';
+                statusHtml = `<span class="w-2 h-2 rounded-full bg-gray-400"></span> No model`;
+                display.className = `text-xs font-medium px-2.5 py-1 rounded-lg ${isDark ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'} mr-1 cursor-pointer flex items-center gap-1.5 transition-colors`;
             }
+            display.innerHTML = statusHtml + ' <i class="fas fa-chevron-up text-[0.5rem]"></i>';
+        }
+        
+        function toggleModelDropdown() {
+            const menu = document.getElementById('modelDropdownMenu');
+            if (menu.classList.contains('hidden')) {
+                renderModelDropdown();
+                menu.classList.remove('hidden');
+                // Close when clicking outside
+                setTimeout(() => {
+                    document.addEventListener('click', closeModelDropdownOnClickOutside);
+                }, 10);
+            } else {
+                menu.classList.add('hidden');
+                document.removeEventListener('click', closeModelDropdownOnClickOutside);
+            }
+        }
+        
+        function closeModelDropdownOnClickOutside(e) {
+            const menu = document.getElementById('modelDropdownMenu');
+            const display = document.getElementById('currentModelDisplay');
+            if (!menu.contains(e.target) && !display.contains(e.target)) {
+                menu.classList.add('hidden');
+                document.removeEventListener('click', closeModelDropdownOnClickOutside);
+            }
+        }
+        
+        function positionModelInfoTooltip(iconElement, tooltipElement) {
+            const iconRect = iconElement.getBoundingClientRect();
+            const tooltipRect = tooltipElement.getBoundingClientRect();
+            const dropdownMenu = document.getElementById('modelDropdownMenu');
+            const dropdownRect = dropdownMenu.getBoundingClientRect();
+            
+            // Position to the left of the dropdown
+            let left = dropdownRect.left - tooltipRect.width - 10;
+            let top = iconRect.top + (iconRect.height / 2) - (tooltipRect.height / 2);
+            
+            // If not enough space on left, show on the left of the icon but still outside dropdown
+            if (left < 10) {
+                left = 10;
+            }
+            
+            // Keep tooltip on screen vertically
+            if (top < 10) top = 10;
+            if (top + tooltipRect.height > window.innerHeight - 10) {
+                top = window.innerHeight - tooltipRect.height - 10;
+            }
+            
+            tooltipElement.style.left = left + 'px';
+            tooltipElement.style.top = top + 'px';
+        }
+        
+        function renderModelDropdown() {
+            const menu = document.getElementById('modelDropdownMenu');
+            const isDark = config.theme === 'dark';
+            
+            // Apply theme to dropdown with nice rounded corners
+            menu.className = `model-dropdown ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} ${menu.classList.contains('hidden') ? 'hidden' : ''}`;
+            
+            if (availableModels.length === 0) {
+                menu.innerHTML = `<p class="text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} text-center py-2">No models available</p>`;
+                return;
+            }
+            
+            // Sort models: running models first, then alphabetically
+            const sortedModels = [...availableModels].sort((a, b) => {
+                const aRunning = runningModels.some(m => m.name === a.name || m.model === a.name);
+                const bRunning = runningModels.some(m => m.name === b.name || m.model === b.name);
+                if (aRunning && !bRunning) return -1;
+                if (!aRunning && bRunning) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            
+            menu.innerHTML = sortedModels.map(model => {
+                const modelName = model.name;
+                const isSelected = modelName === config.currentModel;
+                const runningModel = runningModels.find(m => m.name === modelName || m.model === modelName);
+                const isRunning = !!runningModel;
+                
+                // Status indicator - blink animation ONLY in dropdown
+                let statusDot = '';
+                let statusIcon = '';
+                if (isRunning && isSelected) {
+                    // Running + Selected: green blinking dot with checkmark
+                    statusDot = `<span class="w-2 h-2 rounded-full bg-green-500 status-dot-running flex-shrink-0"></span>`;
+                    statusIcon = `<i class="fas fa-check text-green-500 text-[0.6rem]"></i>`;
+                } else if (isRunning) {
+                    // Running but not selected: green blinking dot only
+                    statusDot = `<span class="w-2 h-2 rounded-full bg-green-500 status-dot-running flex-shrink-0"></span>`;
+                } else {
+                    // Offline: red dot (no animation)
+                    statusDot = `<span class="w-2 h-2 rounded-full bg-red-400 flex-shrink-0"></span>`;
+                }
+                
+                // Info icon with tooltip (only for running models) - positioned OUTSIDE dropdown
+                let infoIcon = '';
+                if (isRunning && runningModel) {
+                    const size = runningModel.size || 0;
+                    const sizeVram = runningModel.size_vram || 0;
+                    const gpuPercent = size > 0 ? Math.round((sizeVram / size) * 100) : 0;
+                    const cpuPercent = 100 - gpuPercent;
+                    const parameterSize = runningModel.details?.parameter_size || 'N/A';
+                    
+                    // Calculate times
+                    const expiresAt = runningModel.expires_at ? new Date(runningModel.expires_at) : null;
+                    const now = new Date();
+                    let startedTime = 'N/A';
+                    let untilTime = 'N/A';
+                    
+                    if (expiresAt) {
+                        const diffMs = expiresAt - now;
+                        if (diffMs > 0) {
+                            const mins = Math.floor(diffMs / 60000);
+                            const secs = Math.floor((diffMs % 60000) / 1000);
+                            untilTime = `${mins}m ${secs}s`;
+                        } else {
+                            untilTime = 'Expiring...';
+                        }
+                        const startedDate = new Date(expiresAt.getTime() - (5 * 60 * 1000));
+                        startedTime = formatTime12hr(startedDate);
+                    }
+                    
+                    // Stop button for running models
+                    const stopBtn = `<button onclick="event.stopPropagation(); stopModelFromDropdown('${modelName}')" class="p-1 rounded ${isDark ? 'hover:bg-red-900/50 text-red-400' : 'hover:bg-red-100 text-red-500'}" title="Stop model"><i class="fas fa-stop text-[0.5rem]"></i></button>`;
+                    
+                    infoIcon = `
+                        <div class="flex items-center gap-1 ml-auto">
+                            ${stopBtn}
+                            <div class="relative info-icon-container" onmouseenter="this.querySelector('.model-info-tooltip').style.display='block'; positionModelInfoTooltip(this.querySelector('i'), this.querySelector('.model-info-tooltip'));" onmouseleave="this.querySelector('.model-info-tooltip').style.display='none';">
+                                <i class="fas fa-info-circle text-xs ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'} cursor-help p-1"></i>
+                                <div class="model-info-tooltip ${isDark ? 'bg-gray-900 border border-gray-700 text-gray-200' : 'bg-white border border-gray-200 text-gray-700'}" style="display: none;">
+                                    <div class="grid grid-cols-2 gap-1">
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">Size</p>
+                                            <p class="font-semibold">${formatBytes(size)}</p>
+                                        </div>
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">CPU</p>
+                                            <p class="font-semibold">${cpuPercent}%</p>
+                                        </div>
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">GPU</p>
+                                            <p class="font-semibold">${gpuPercent}%</p>
+                                        </div>
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">Params</p>
+                                            <p class="font-semibold">${parameterSize}</p>
+                                        </div>
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">Started</p>
+                                            <p class="font-semibold">${startedTime}</p>
+                                        </div>
+                                        <div class="text-center p-1 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded">
+                                            <p class="uppercase text-[0.5rem] opacity-70">Until</p>
+                                            <p class="font-semibold">${untilTime}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Background for selected model
+                const selectedBg = isSelected ? (isDark ? 'bg-purple-900/30' : 'bg-purple-50') : '';
+                
+                return `
+                    <div 
+                        class="model-dropdown-item ${selectedBg} ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}"
+                        onclick="selectModelFromDropdown('${modelName}', ${isRunning})"
+                    >
+                        ${statusDot}
+                        <span class="flex-1 text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'} truncate">${modelName}</span>
+                        ${statusIcon}
+                        ${infoIcon}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function selectModelFromDropdown(modelName, isRunning) {
+            // Close dropdown
+            document.getElementById('modelDropdownMenu').classList.add('hidden');
+            document.removeEventListener('click', closeModelDropdownOnClickOutside);
+            
+            // Update config
+            config.currentModel = modelName;
+            saveConfig();
+            document.getElementById('modelSelector').value = modelName;
+            
+            if (isRunning) {
+                // Model is already running, just select it
+                checkRunningModels();
+                showToast(`Switched to ${modelName}`, 'success');
+            } else {
+                // Model not running, update status
+                checkRunningModels();
+                showToast(`Selected ${modelName} - click Start Model to load`, 'info');
+            }
+        }
+        
+        async function stopModelFromDropdown(modelName) {
+            // Close dropdown first
+            document.getElementById('modelDropdownMenu').classList.add('hidden');
+            document.removeEventListener('click', closeModelDropdownOnClickOutside);
+            
+            // Stop the model
+            await stopModel(modelName, null);
         }
         
         function updateSendButton() {
@@ -1989,7 +2528,8 @@
                 btn.classList.remove('opacity-50');
             }
             
-            input.placeholder = modelReady ? 'Type your message...' : 'Model will auto-start when you send a message...';
+            // Always show the keyboard hint in placeholder
+            input.placeholder = 'Press Enter to send, Shift+Enter for new line';
         }
         
         // ============ Message Handling ============
@@ -2063,7 +2603,7 @@
             updateTotalMessagesCount();
             
             input.value = '';
-            input.style.height = 'auto';
+            input.style.height = '80px';
             
             userHasScrolled = false;
             await generateResponse(chat);
@@ -2079,6 +2619,7 @@
         
         async function generateResponse(chat) {
             isGenerating = true;
+            generatingChatId = chat.id; // Track which chat is generating
             abortController = new AbortController();
             currentTokenCount = 0;
             responseStartTime = Date.now();
@@ -2197,24 +2738,39 @@
             assistantMsg.responseTime = Date.now() - responseStartTime;
             
             chat.updatedAt = new Date().toISOString();
+            
+            // If user is not viewing this chat, increment unread count
+            if (currentChatId !== chat.id) {
+                chat.unreadCount = (chat.unreadCount || 0) + 1;
+            }
+            
             saveChatSessions();
             updateTotalMessagesCount();
             
             isGenerating = false;
+            const finishedChatId = generatingChatId; // Store before clearing
+            generatingChatId = null; // Clear generating chat
             abortController = null;
-            sendIcon.className = 'fas fa-paper-plane';
             
-            // Hide stop button, show send button
-            document.getElementById('stopBtn').classList.add('hidden');
-            document.getElementById('sendBtn').classList.remove('hidden');
+            // Only update UI if we're still on the chat that just finished
+            if (currentChatId === finishedChatId) {
+                sendIcon.className = 'fas fa-paper-plane';
+                
+                // Hide stop button, show send button
+                document.getElementById('stopBtn').classList.add('hidden');
+                document.getElementById('sendBtn').classList.remove('hidden');
+                
+                updateSendButton();
+                
+                document.getElementById('chatTitle').textContent = chat.title;
+                updateChatStats(chat);
+                
+                // Re-render to show final token count and response time
+                renderMessages(chat.messages);
+            }
             
-            updateSendButton();
-            
-            document.getElementById('chatTitle').textContent = chat.title;
-            updateChatStats(chat);
-            
-            // Re-render to show final token count and response time
-            renderMessages(chat.messages);
+            // Always re-render chat sessions to update unread indicator
+            renderChatSessions();
         }
         
         function updateTokenSpeed() {
@@ -2236,6 +2792,9 @@
             const container = document.getElementById('messages');
             const isDark = config.theme === 'dark';
             
+            // Only show streaming indicator if this is the chat that's currently generating
+            const shouldShowStreaming = isStreaming && (generatingChatId === currentChatId);
+            
             if (messages.length === 0) {
                 container.innerHTML = '';
                 container.appendChild(createWelcomeScreen());
@@ -2245,8 +2804,8 @@
             container.innerHTML = messages.map((msg, idx) => {
                 const isLast = idx === messages.length - 1;
                 const isAssistant = msg.role === 'assistant';
-                const showTyping = isStreaming && isLast && isAssistant && !msg.content;
-                const showTokenSpeed = isStreaming && isLast && isAssistant && msg.content;
+                const showTyping = shouldShowStreaming && isLast && isAssistant && !msg.content;
+                const showTokenSpeed = shouldShowStreaming && isLast && isAssistant && msg.content;
                 // Show tokens for both user and assistant messages
                 const tokens = msg.tokens || 0;
                 const responseTime = msg.responseTime || 0;
@@ -2257,10 +2816,23 @@
                     responseTimeStr = ` • ${formatDuration(responseTime)}`;
                 }
                 
-                // Official Ollama logo
-                const ollamaLogo = `<div class="ollama-logo">
+                // Official Ollama logo - only show if config.showAnswerIcon is true
+                const ollamaLogo = config.showAnswerIcon ? `<div class="ollama-logo">
                     <img src="https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7" alt="Ollama" onerror="this.parentElement.style.background='#000';this.parentElement.innerHTML='<i class=\\'fas fa-robot text-white text-lg\\'></i>'" />
-                </div>`;
+                </div>` : '';
+                
+                // Determine AI message styling based on removeAnswerBackground setting
+                const removeAnswerBg = config.removeAnswerBackground;
+                let aiMessageStyle = '';
+                if (isAssistant) {
+                    if (removeAnswerBg) {
+                        // No background, just text color
+                        aiMessageStyle = isDark ? 'text-gray-100' : 'text-gray-900';
+                    } else {
+                        // With background card
+                        aiMessageStyle = isDark ? 'bg-gray-700 text-gray-100 rounded-2xl p-4 shadow-sm border border-gray-600' : 'bg-white text-gray-900 border border-gray-200 rounded-2xl p-4 shadow-sm';
+                    }
+                }
                 
                 return `
                     <div class="message-enter flex gap-4 ${isAssistant ? '' : 'flex-row-reverse'}">
@@ -2270,14 +2842,14 @@
                             </div>
                         `}
                         <div class="flex-1 max-w-[80%] ${isAssistant ? '' : 'flex flex-col items-end'}">
-                            <div class="rounded-2xl p-4 ${isAssistant ? (isDark ? 'bg-gray-700 text-gray-100' : 'bg-white text-gray-900 border border-gray-200') : 'gradient-bg text-white'} shadow-sm ${isAssistant ? 'ai-message-content' : ''}" ${isLast && isAssistant ? 'id="lastMessage"' : ''}>
+                            <div class="${isAssistant ? aiMessageStyle : 'rounded-2xl p-4 bg-purple-600 text-white shadow-sm user-message-content'} ${isAssistant ? 'ai-message-content' : ''}" ${isLast && isAssistant ? 'id="lastMessage"' : ''}>
                                 ${showTyping ? `
                                     <div class="flex items-center gap-1.5 py-1">
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                         <span class="typing-dot w-2 h-2 rounded-full bg-gray-400"></span>
                                     </div>
-                                ` : formatMessage(msg.content, isStreaming && isLast && isAssistant)}
+                                ` : formatMessage(msg.content, shouldShowStreaming && isLast && isAssistant)}
                             </div>
                             <div class="flex items-center gap-2 mt-1 px-2">
                                 <p class="text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}">
@@ -2308,6 +2880,11 @@
         }
         
         function updateLastMessage(content, isStreaming = false) {
+            // Only update if we're on the chat that's generating
+            if (generatingChatId && generatingChatId !== currentChatId) {
+                return; // Don't update UI if we switched to a different chat
+            }
+            
             const el = document.getElementById('lastMessage');
             if (el) {
                 el.innerHTML = formatMessage(content, isStreaming);
@@ -2327,7 +2904,9 @@
                 document.querySelectorAll('.copy-code-chip').forEach(btn => {
                     if (!btn.hasAttribute('data-listener')) {
                         btn.setAttribute('data-listener', 'true');
-                        btn.addEventListener('click', function() {
+                        btn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
                             const codeBlock = this.closest('pre').querySelector('code');
                             // Get raw text content, preserving formatting
                             const code = codeBlock.textContent;
@@ -2361,6 +2940,11 @@
             // Escape HTML for non-code content
             let formatted = escapeHtml(tempContent);
             
+            // Headings - ### Heading (must be at start of line or after <br>)
+            formatted = formatted.replace(/^### (.+)$/gm, '<h2 class="text-xl font-bold mt-3 mb-1">$1</h2>');
+            formatted = formatted.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold mt-3 mb-1">$1</h2>');
+            formatted = formatted.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-3 mb-1">$1</h1>');
+            
             // Inline code (before putting code blocks back)
             formatted = formatted.replace(/`([^`]+)`/g, `<code class="px-1.5 py-0.5 rounded ${isDark ? 'bg-gray-600' : 'bg-gray-200'} text-sm font-mono">$1</code>`);
             
@@ -2377,7 +2961,7 @@
             codeBlocks.forEach((block, index) => {
                 // Don't escape - let highlight.js handle it, but we need to preserve the raw code
                 const rawCode = block.code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const codeHtml = `<pre><span class="copy-code-chip">${copyLabel}</span><code class="language-${block.lang}">${rawCode}</code></pre>`;
+                const codeHtml = `<pre><button class="copy-code-chip">${copyLabel}</button><code class="language-${block.lang}">${rawCode}</code></pre>`;
                 formatted = formatted.replace(`&lt;&lt;&lt;CODEBLOCK_${index}&gt;&gt;&gt;`, codeHtml);
             });
             
@@ -2412,38 +2996,51 @@
             document.getElementById('appTitle').className = `font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`;
             document.getElementById('appSubtitle').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
             
-            // Model section
-            document.getElementById('modelSection').className = `p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
-            document.getElementById('modelLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
-            document.getElementById('modelSelector').className = `w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
-            document.getElementById('modelDropdownIcon').className = `fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none z-10 ${isDark ? 'text-gray-400' : 'text-gray-400'}`;
-            document.getElementById('availableModelsCount').className = `text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-100 text-purple-600'}`;
+            // Model section is now hidden - only used for internal state
             
-            // Chat sessions section
-            document.getElementById('chatSessionsSection').className = `flex-1 overflow-y-auto scrollbar-thin p-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`;
-            document.getElementById('recentChatsLabel').className = `text-xs font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wide`;
-            document.getElementById('totalMessagesCount').className = `text-xs px-2 py-0.5 rounded-full font-medium ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`;
+            // Chat sessions section - now uses full sidebar height
+            document.getElementById('chatSessionsSection').className = `flex-1 overflow-y-auto scrollbar-thin p-3`;
             document.getElementById('newChatBtn').className = `w-full mb-3 py-2.5 px-4 rounded-xl border-2 border-dashed ${isDark ? 'border-gray-600 hover:border-purple-500 hover:bg-purple-900/30 text-gray-400 hover:text-purple-400' : 'border-gray-300 hover:border-purple-500 hover:bg-purple-50 text-gray-700 hover:text-purple-600'} transition-all duration-200 flex items-center justify-center gap-2 group`;
             
             // Main area
-            document.getElementById('mainArea').className = `flex-1 flex flex-col ${isDark ? 'bg-gray-900' : 'bg-white'} relative`;
-            document.getElementById('header').className = `border-b flex items-center justify-between px-6 py-3 ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`;
+            document.getElementById('mainArea').className = `flex-1 flex flex-col ${isDark ? 'bg-gray-800' : 'bg-gray-50'} relative`;
+            // Header is now just the theme toggle button
+            document.getElementById('header').className = `absolute top-3 right-3 z-20`;
+            // Hidden chat stats elements
             document.getElementById('chatTitle').className = `font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`;
             document.getElementById('chatSubtitle').className = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
+            // Messages container uses same background as main area
             document.getElementById('messagesContainer').className = `flex-1 overflow-y-auto scrollbar-thin p-6 ${isDark ? 'bg-gray-800' : 'bg-gray-50'} relative`;
-            document.getElementById('inputArea').className = `p-4 border-t ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'} relative`;
+            // Input area - transparent to show messages container bg
+            document.getElementById('inputArea').className = `p-4 relative bg-transparent`;
             document.getElementById('inputHint').className = `text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} text-center mt-3`;
             document.getElementById('themeIcon').className = `fas ${isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'}`;
-            document.getElementById('messageInput').className = `w-full py-4 px-5 pr-36 rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all max-h-40 ${isDark ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}`;
+            // Theme toggle button styling
+            const themeBtn = document.getElementById('header').querySelector('button');
+            if (themeBtn) {
+                themeBtn.className = `p-2.5 rounded-xl ${isDark ? 'bg-gray-700/80' : 'bg-white/80'} backdrop-blur-sm ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'} transition-colors shadow-md`;
+            }
+            const msgInput = document.getElementById('messageInput');
+            msgInput.className = `w-full py-4 px-5 pr-48 rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}`;
             
             // System prompt button
             document.getElementById('systemPromptBtn').className = `w-10 h-10 rounded-xl ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'} flex items-center justify-center transition-colors`;
+            
+            // Model dropdown menu styling
+            const modelDropdown = document.getElementById('modelDropdownMenu');
+            if (modelDropdown) {
+                modelDropdown.className = `model-dropdown ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} ${modelDropdown.classList.contains('hidden') ? 'hidden' : ''}`;
+            }
+            
+            // Model status display is now updated by updateModelDisplay()
             
             // Scroll buttons with chip style
             const scrollTopBtn = document.getElementById('scrollTopBtn');
             const scrollBottomBtn = document.getElementById('scrollBottomBtn');
             scrollTopBtn.className = `scroll-nav-btn ${isDark ? 'bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'}`;
+            scrollTopBtn.title = 'Go to top';
             scrollBottomBtn.className = `scroll-nav-btn ${isDark ? 'bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'}`;
+            scrollBottomBtn.title = 'Go to bottom';
             // Preserve display state
             scrollTopBtn.style.display = scrollTopBtn.style.display;
             scrollBottomBtn.style.display = scrollBottomBtn.style.display;
@@ -2495,11 +3092,7 @@
             // Test Connection button - fix dark mode visibility
             document.getElementById('testConnBtn').className = `py-2 px-4 rounded-xl border transition-colors text-sm flex items-center gap-2 ${isDark ? 'border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600' : 'border-gray-300 hover:bg-gray-100 text-gray-700'}`;
             
-            // Dark Mode container label
-            const darkModeLabel = document.querySelector('#darkModeContainer > span');
-            if (darkModeLabel) {
-                darkModeLabel.className = isDark ? 'text-gray-200' : 'text-gray-700';
-            }
+
             
             // Data management buttons - fix Export button visibility in dark mode
             const exportBtn = document.querySelector('#settingsContent button[onclick="exportChats()"]');
@@ -2513,17 +3106,44 @@
                 settingsModelSelector.className = `w-full py-2.5 px-4 pr-10 rounded-xl appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
             }
             
-            // Dark mode toggle
+            // Dark mode toggle - now using same toggle-switch class as others
             const darkModeToggle = document.getElementById('darkModeToggle');
-            const toggleKnob = document.getElementById('toggleKnob');
-            darkModeToggle.className = `w-14 h-7 rounded-full relative transition-colors duration-300 ${isDark ? 'bg-purple-500' : 'bg-gray-300'}`;
-            toggleKnob.style.left = isDark ? '1.75rem' : '0.25rem';
+            if (isDark) {
+                darkModeToggle.classList.add('active', 'bg-purple-500');
+                darkModeToggle.classList.remove('bg-gray-300');
+                darkModeToggle.querySelector('.toggle-knob').style.transform = 'translateX(20px)';
+            } else {
+                darkModeToggle.classList.remove('active', 'bg-purple-500');
+                darkModeToggle.classList.add('bg-gray-300');
+                darkModeToggle.querySelector('.toggle-knob').style.transform = 'translateX(0)';
+            }
             document.getElementById('darkModeContainer').className = `flex items-center justify-between py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+            
+            // Dark mode label
+            const darkModeLabel = document.getElementById('darkModeLabel');
+            if (darkModeLabel) darkModeLabel.className = `${isDark ? 'text-gray-200' : 'text-gray-700'} text-sm font-medium`;
+            
+            // Show Answer Icon toggle
+            const showAnswerIconContainer = document.getElementById('showAnswerIconContainer');
+            if (showAnswerIconContainer) {
+                showAnswerIconContainer.className = `flex items-center justify-between py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const showAnswerIconLabel = document.getElementById('showAnswerIconLabel');
+                if (showAnswerIconLabel) showAnswerIconLabel.className = `${isDark ? 'text-gray-200' : 'text-gray-700'} text-sm font-medium`;
+            }
+            
+            // Remove answer background toggle
+            const removeAnswerBgContainer = document.getElementById('removeAnswerBgContainer');
+            if (removeAnswerBgContainer) {
+                removeAnswerBgContainer.className = `flex items-center justify-between py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const removeAnswerBgLabel = document.getElementById('removeAnswerBgLabel');
+                if (removeAnswerBgLabel) removeAnswerBgLabel.className = `${isDark ? 'text-gray-200' : 'text-gray-700'} text-sm font-medium`;
+            }
             
             // Fonts section - removed old fontsSectionTitle reference as it's now a button
             
             // Font containers
             const interfaceFontContainer = document.getElementById('interfaceFontContainer');
+            const questionFontContainer = document.getElementById('questionFontContainer');
             const answerFontContainer = document.getElementById('answerFontContainer');
             const codeFontContainer = document.getElementById('codeFontContainer');
             
@@ -2531,6 +3151,11 @@
                 interfaceFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
                 const interfaceFontLabel = document.getElementById('interfaceFontLabel');
                 if (interfaceFontLabel) interfaceFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
+            }
+            if (questionFontContainer) {
+                questionFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
+                const questionFontLabel = document.getElementById('questionFontLabel');
+                if (questionFontLabel) questionFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
             }
             if (answerFontContainer) {
                 answerFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
@@ -2541,6 +3166,16 @@
                 codeFontContainer.className = `py-3 px-4 rounded-xl border ${isDark ? 'border-gray-600' : 'border-gray-300'}`;
                 const codeFontLabel = document.getElementById('codeFontLabel');
                 if (codeFontLabel) codeFontLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block`;
+                
+                // Code theme label
+                const codeThemeLabel = document.getElementById('codeThemeLabel');
+                if (codeThemeLabel) codeThemeLabel.className = `text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2 block mt-3`;
+                
+                // Code theme selector
+                const codeThemeSelector = document.getElementById('codeThemeSelector');
+                if (codeThemeSelector) {
+                    codeThemeSelector.className = `w-full py-2 px-3 pr-8 rounded-lg appearance-none cursor-pointer border focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm ${isDark ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+                }
             }
             
             // System prompt popup
@@ -2656,15 +3291,21 @@
                 autostartModels: false,
                 interfaceFont: 'Inter',
                 interfaceFontSize: 14,
+                questionFont: 'Inter',
+                questionFontSize: 14,
                 answerFont: 'Inter',
                 answerFontSize: 14,
                 codeFont: 'JetBrains Mono',
-                codeFontSize: 13
+                codeFontSize: 13,
+                codeTheme: 'atom-one-dark',
+                removeAnswerBackground: true,
+                showAnswerIcon: true
             };
             saveConfig();
             loadConfig();
             applyTheme();
             applyFonts();
+            applyCodeTheme();
             updateSettingsToggles();
             checkOllamaStatus();
             showToast('All configs reset to default!', 'success');
@@ -2680,7 +3321,8 @@
         
         function autoResize(textarea) {
             textarea.style.height = 'auto';
-            textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px';
+            const newHeight = Math.min(textarea.scrollHeight, 400);
+            textarea.style.height = newHeight + 'px';
         }
         
         function toggleSidebar() {
