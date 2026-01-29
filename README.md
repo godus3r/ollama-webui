@@ -3,7 +3,11 @@
 A purely browser-based, lightweight interface for Ollama models. 
 
 **Zero dependencies. No Docker. No Node.js.** Just download the HTML file and run it.
-
+## ✨ Interface Design
+**Chat Interface**
+![Chat interface](images/chats.png)
+**Customization settings**
+![Customization settings](images/ui-settings.png)
 ## ✨ Features
 
 - **🚀 Zero Setup:** No installation required. Just open `index.html`.
